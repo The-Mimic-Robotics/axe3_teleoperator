@@ -1,0 +1,38 @@
+Joint 1 (Base Pan): Rotates the whole arm left/right around the Z-axis.
+
+Link 1 (Base → Shoulder): You measured x=1cm, z=1.8cm. This is the small bracket holding the second motor.
+
+Joint 2 (Shoulder): Rotates the upper arm up/down.
+
+Link 2 (Upper Arm): You measured z=35cm (long part up) and x=5cm (small step forward).
+
+    Interpretation: At "0 degrees" (your "mirrored L" shape), this link goes mostly UP (Z) and a little bit FORWARD (X).
+
+Joint 3 (Elbow): Rotates the forearm.
+
+Link 3 (Forearm): You measured x=35cm (long part forward).
+
+and 
+
+ mini : "---------------------------
+
+NAME              |    NORM
+
+shoulder_pan.pos  |  118.81
+
+shoulder_lift.pos |   73.93
+
+elbow_flex.pos    |   84.57
+
+"
+
+
+and max "NAME              |    NORM
+
+shoulder_pan.pos  | -117.49
+
+shoulder_lift.pos | -104.09
+
+elbow_flex.pos    |  -89.05
+
+" 

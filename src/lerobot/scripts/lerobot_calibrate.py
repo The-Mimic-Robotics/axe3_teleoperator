@@ -19,9 +19,9 @@ Example:
 
 ```shell
 lerobot-calibrate \
-    --teleop.type=so100_leader \
-    --teleop.port=/dev/tty.usbmodem58760431551 \
-    --teleop.id=blue
+    --teleop.type=axe3_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=axe
 ```
 """
 
@@ -43,6 +43,7 @@ from lerobot.robots import (  # noqa: F401
     omx_follower,
     so100_follower,
     so101_follower,
+    axe3_follower,
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -53,6 +54,7 @@ from lerobot.teleoperators import (  # noqa: F401
     omx_leader,
     so100_leader,
     so101_leader,
+    axe3_leader,
 )
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.utils import init_logging

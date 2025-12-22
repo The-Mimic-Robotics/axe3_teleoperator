@@ -16,17 +16,20 @@
 Simple script to control a robot from teleoperation.
 
 Example:
-
+lerobot-calibrate \
+    --teleop.type=axe3_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=axe
 ```shell
 lerobot-teleoperate \
-    --robot.type=so101_follower \
-    --robot.port=/dev/tty.usbmodem58760431541 \
-    --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 1920, height: 1080, fps: 30}}" \
-    --robot.id=black \
-    --teleop.type=so101_leader \
-    --teleop.port=/dev/tty.usbmodem58760431551 \
-    --teleop.id=blue \
-    --display_data=true
+    --robot.type=axe3_follower \
+    --robot.cameras={} \
+    --robot.udp_port=5005 \
+    --teleop.type=axe3_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.imu_port=5000 \
+    --teleop.id=axe \
+    --display_data=true 
 ```
 
 Example teleoperation with bimanual so100:
@@ -78,6 +81,8 @@ from lerobot.robots import (  # noqa: F401
     omx_follower,
     so100_follower,
     so101_follower,
+    axe3_follower,
+
 )
 from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
@@ -91,6 +96,7 @@ from lerobot.teleoperators import (  # noqa: F401
     omx_leader,
     so100_leader,
     so101_leader,
+    axe3_leader,
 )
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import precise_sleep

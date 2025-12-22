@@ -1,0 +1,25 @@
+g++ main.cpp EasyProfile/*.cpp -o imu_udp -I.
+
+
+
+
+# Change port only
+./imu_udp /dev/ttyACM1
+
+# Change port and IP
+./imu_udp /dev/ttyACM1 192.168.1.50
+
+# Change port, IP, and UDP Port
+./imu_udp /dev/ttyACM1 127.0.0.1 5005
+
+
+
+lerobot-teleoperate \
+    --robot.type=axe3_follower \
+    --robot.cameras={} \
+    --robot.udp_port=5005 \
+    --teleop.type=axe3_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.imu_port=5000 \
+    --teleop.id=axe \
+    --display_data=true 

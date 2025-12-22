@@ -53,6 +53,10 @@ def make_teleoperator_from_config(config: TeleoperatorConfig) -> Teleoperator:
         from .so101_leader import SO101Leader
 
         return SO101Leader(config)
+    elif config.type == "axe3_leader":
+        from .axe3_leader import axe3Leader
+
+        return axe3Leader(config)
     elif config.type == "mock_teleop":
         from tests.mocks.mock_teleop import MockTeleop
 
