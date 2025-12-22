@@ -27,4 +27,10 @@ test
 
 python simple_udp_receiver.py
 
+for more testing , instead of isaac Lab : 
+
+pip install mujoco
+
+python tester_eef/eef_tester.py
+
 
