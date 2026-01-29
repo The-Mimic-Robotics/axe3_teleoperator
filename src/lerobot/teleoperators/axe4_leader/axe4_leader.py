@@ -17,21 +17,21 @@ from lerobot.motors.feetech import (
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from ..teleoperator import Teleoperator
-from .config_axe3_leader import axe3LeaderConfig
+from .config_axe4_leader import axe4LeaderConfig
 
 logger = logging.getLogger(__name__)
 
 
-class axe3Leader(Teleoperator):
+class axe4Leader(Teleoperator):
     """
     SO-101 Leader Arm designed by TheRobotStudio and Hugging Face.
     Modified to include IMU data via UDP.
     """
 
-    config_class = axe3LeaderConfig
-    name = "axe3_leader"
+    config_class = axe4LeaderConfig
+    name = "axe4_leader"
 
-    def __init__(self, config: axe3LeaderConfig):
+    def __init__(self, config: axe4LeaderConfig):
         super().__init__(config)
         self.config = config
         norm_mode_body = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
@@ -43,6 +43,7 @@ class axe3Leader(Teleoperator):
                 "shoulder_pan": Motor(1, "sts3215", norm_mode_body),
                 "shoulder_lift": Motor(2, "sts3215", norm_mode_body),
                 "elbow_flex": Motor(3, "sts3215", norm_mode_body),
+                "elbow_super_flex": Motor(4, "sts3215", norm_mode_body),
             },
             calibration=self.calibration,
         )
@@ -164,11 +165,7 @@ class axe3Leader(Teleoperator):
         except Exception as e:
             logger.warning(f"UDP Read Error: {e}")
 
-        # 3. Merge Data
-        # action["imu.qw"] = self.latest_imu_data[0]
-        # action["imu.qx"] = self.latest_imu_data[1]
-        # action["imu.qy"] = self.latest_imu_data[2]
-        # action["imu.qz"] = self.latest_imu_data[3]
+
 
         action = {
             "x": x,
@@ -210,25 +207,52 @@ class axe3Leader(Teleoperator):
             Output: (x, y, z) tuple in METERS.
             """
             
+
+            #0 defining coordinat sys
+            """
+            Origin (0,0,0): The center of the Base Motor (Motor 1)
+
+            using the handle has the refernce direction 
+
+            Z-Axis (+): Points UP (towards the ceiling).
+            X-Axis (+): Points FORWARD (towards your computer/workspace).
+            Y-Axis (+): Points LEFT (following the Right-Hand Rule).
+
+
+        
+            """
+            offset_shoulder = 0.0 
+            offset_elbow1   = -90.0  # Tells math: "0 degrees means bent 90 degrees"
+            offset_elbow2   = -90.0
+            
+
             # 1. Convert to Radians
             # Note: We negate some angles if the rotation direction is opposite to standard right-hand rule.
             # usually: Pan (+) = Left, Lift (+) = Down/Forward, Elbow (+) = Down/In
             q1 = np.radians(joints_degrees["shoulder_pan"])
-            q2 = np.radians(joints_degrees["shoulder_lift"])
-            q3 = np.radians(joints_degrees["elbow_flex"])
+            q2 = np.radians(-1 * joints_degrees["shoulder_lift"] + offset_shoulder)
+            q3 = np.radians(-1 * joints_degrees["elbow_flex"] + offset_elbow1)
+            q4 = np.radians(-1* joints_degrees["elbow_super_flex"] +offset_elbow2)
 
-            v1 = np.array([0.01, 0, 0.02]) # x,y,z
-            v2 = np.array([0.05, 0, 0.35])
-            v3 = np.array([0.35, 0, 0])
-
-
+            # v1 = np.array([0.075, -0.02, 0]) # x,y,z
+            # v2 = np.array([0.255, -0.03, 0])
+            # v3 = np.array([-0.03, -0.255, 0])
+            # v4 = np.array([-0.315, 0, 0])  # to teh EEF which is the cneter of rotation of teh u joint
+            # Measure the actual length of the black tubes + plastic parts
+            # Let's assume 25.5cm and 31.5cm based on your previous numbers.
+            v1 = np.array([0.075, -0.02, 0])   # Base offset (Keep this)
+            v2 = np.array([0.255, 0.0, 0.0])   # Link 1: Just a 25cm stick
+            v3 = np.array([0.255, 0.0, 0.0])   # Link 2: Just a 25cm stick
+            v4 = np.array([0.120, 0.0, 0.0])   # Handle: Just a 12cm stick
+            #axis 2-4 are versitcal on the z in that set up
             p1 = v1
-            p2 = rot_y(q2) @ v2
-            p3 = rot_y(q2 + q3) @ v3
+            p2 = rot_z(q2) @ v2
+            p3 = rot_z(q2 + q3) @ v3
+            p4 = rot_z(q2 + q3 + q4) @ v4
 
-            arm_in_2d_plane = p1 + p2 + p3
-
-            final_pos = rot_z(q1) @ arm_in_2d_plane
+            arm_in_2d_plane = p1 + p2 + p3 + p4
+            #base axis is horizontale on that set up
+            final_pos = rot_x(q1) @ arm_in_2d_plane
 
             # 4. Apply Pan Rotation (Joint 1)
             x_final = final_pos[0]
@@ -237,16 +261,6 @@ class axe3Leader(Teleoperator):
 
             return x_final, y_final, z_final
     
-def rot_y(ang):
-    #rotate vector arrnd y axis
-    c = np.cos(ang)
-    s = np.sin(ang)
-    return np.array([
-        [c, 0, s],
-        [0, 1, 0],
-        [-s, 0, c]
-    ])
-
 def rot_z(ang):
     #rotate vector arrnd y axis
     c = np.cos(ang)
@@ -255,4 +269,14 @@ def rot_z(ang):
         [c, -s, 0],
         [s, c, 0],
         [0, 0, 1]
+    ])
+
+def rot_x(ang):
+    #rotate vector arrnd y axis
+    c = np.cos(ang)
+    s = np.sin(ang)
+    return np.array([
+        [1, 0, 0],
+        [0, c, -s],
+        [0, s, c]
     ])

@@ -44,6 +44,10 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .axe3_follower import axe3Follower
 
         return axe3Follower(config)
+    elif config.type == "axe4_follower":
+        from .axe4_follower import axe4Follower
+
+        return axe4Follower(config)
     elif config.type == "lekiwi":
         from .lekiwi import LeKiwi
 

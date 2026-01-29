@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from ..config import TeleoperatorConfig
 
 
-@TeleoperatorConfig.register_subclass("axe3_leader")
+@TeleoperatorConfig.register_subclass("axe4_leader")
 @dataclass
-class axe3LeaderConfig(TeleoperatorConfig):
+class axe4LeaderConfig(TeleoperatorConfig):
     # Port to connect to the arm
     port: str
 

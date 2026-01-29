@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+#mimic mathias Desrochers eltopchi1@gmail.com
+
 import logging
 import struct
 import socket
@@ -8,18 +10,18 @@ from typing import Any
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from ..robot import Robot 
-from .config_axe3_follower import axe3FollowerConfig
+from .config_axe4_follower import axe4FollowerConfig
 
 logger = logging.getLogger(__name__)
 
-class axe3Follower(Robot):
+class axe4Follower(Robot):
     """
     A Proxy Robot that sends actions over UDP instead of controlling physical motors.
     """
-    config_class = axe3FollowerConfig
-    name = "axe3_udp_follower"
+    config_class = axe4FollowerConfig
+    name = "axe4_udp_follower"
 
-    def __init__(self, config: axe3FollowerConfig):
+    def __init__(self, config: axe4FollowerConfig):
         self.config = config
         self.cameras = make_cameras_from_configs(config.cameras)
         

@@ -82,6 +82,7 @@ from lerobot.robots import (  # noqa: F401
     so100_follower,
     so101_follower,
     axe3_follower,
+    axe4_follower,
 
 )
 from lerobot.teleoperators import (  # noqa: F401
@@ -97,6 +98,8 @@ from lerobot.teleoperators import (  # noqa: F401
     so100_leader,
     so101_leader,
     axe3_leader,
+    axe4_leader,
+    
 )
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import precise_sleep

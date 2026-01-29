@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+#mimic mathias Desrochers eltopchi1@gmail.com
+
 import logging
 import struct
 import socket
