@@ -1,0 +1,110 @@
+{
+  "output_axis_map": [
+    [0.0, -1.0, 0.0],
+    [0.0, 0.0, -1.0],
+    [-1.0, 0.0, 0.0]
+    
+  ],
+  "direction_report": {
+    "FORWARD": {
+      "fk_delta_xyz": [-0.0584, 0.3069, -0.0004],
+      "mapped": "+Y → physical +X",
+      "joint_delta_raw": {
+        "shoulder_pan": -46,
+        "shoulder_lift": -964,
+        "elbow_flex": 548,
+        "elbow_super_flex": 435
+      }
+    },
+    "BACKWARD": {
+      "fk_delta_xyz": [-0.0114, -0.1581, 0.0225],
+      "mapped": "-Y → physical -X",
+      "joint_delta_raw": {
+        "shoulder_pan": -31,
+        "shoulder_lift": 466,
+        "elbow_flex": 3513,
+        "elbow_super_flex": 117
+      }
+    },
+    "LEFT": {
+      "fk_delta_xyz": [0.0619, 0.1390, -0.3299],
+      "mapped": "-Z → physical +Y",
+      "joint_delta_raw": {
+        "shoulder_pan": 724,
+        "shoulder_lift": 182,
+        "elbow_flex": -350,
+        "elbow_super_flex": 133
+      }
+    },
+    "RIGHT": {
+      "fk_delta_xyz": [0.0576, 0.0701, 0.3012],
+      "mapped": "+Z → physical -Y",
+      "joint_delta_raw": {
+        "shoulder_pan": -596,
+        "shoulder_lift": 187,
+        "elbow_flex": -344,
+        "elbow_super_flex": 71
+      }
+    },
+    "UP": {
+      "fk_delta_xyz": [0.3632, 0.1306, 0.0117],
+      "mapped": "+X → physical +Z",
+      "joint_delta_raw": {
+        "shoulder_pan": -44,
+        "shoulder_lift": -182,
+        "elbow_flex": 3492,
+        "elbow_super_flex": -181
+      }
+    },
+    "DOWN": {
+      "fk_delta_xyz": [-0.3849, -0.1564, -0.0343],
+      "mapped": "-X → physical -Z",
+      "joint_delta_raw": {
+        "shoulder_pan": 48,
+        "shoulder_lift": 974,
+        "elbow_flex": 3518,
+        "elbow_super_flex": -176
+      }
+    }
+  },
+  "joint_limits_raw": {
+    "shoulder_pan": {
+      "min": 5,
+      "max": 4090
+    },
+    "shoulder_lift": {
+      "min": 1224,
+      "max": 3287
+    },
+    "elbow_flex": {
+      "min": 138,
+      "max": 1572
+    },
+    "elbow_super_flex": {
+      "min": 1307,
+      "max": 2787
+    }
+  },
+  "joint_limits_deg": {
+    "shoulder_pan": {
+      "min_deg": 0.44,
+      "max_deg": 359.47,
+      "range_deg": 359.03
+    },
+    "shoulder_lift": {
+      "min_deg": 107.58,
+      "max_deg": 288.9,
+      "range_deg": 181.32
+    },
+    "elbow_flex": {
+      "min_deg": 12.13,
+      "max_deg": 138.16,
+      "range_deg": 126.04
+    },
+    "elbow_super_flex": {
+      "min_deg": 114.87,
+      "max_deg": 244.95,
+      "range_deg": 130.08
+    }
+  }
+}

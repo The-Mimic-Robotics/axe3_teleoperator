@@ -1,0 +1,331 @@
+{
+  "HOME": {
+    "raw": {
+      "shoulder_pan": 3076,
+      "shoulder_lift": 2305,
+      "elbow_flex": 448,
+      "elbow_super_flex": 512
+    },
+    "deg": {
+      "shoulder_pan": 0.0,
+      "shoulder_lift": 0.0,
+      "elbow_flex": 0.0,
+      "elbow_super_flex": 0.0
+    },
+    "fk": [
+      0.20400000000000001,
+      -0.302,
+      0.0
+    ]
+  },
+  "FORWARD": {
+    "raw_delta": {
+      "shoulder_pan": -46,
+      "shoulder_lift": -964,
+      "elbow_flex": 548,
+      "elbow_super_flex": 435
+    },
+    "deg": {
+      "shoulder_pan": -4.06,
+      "shoulder_lift": -84.73,
+      "elbow_flex": 48.25,
+      "elbow_super_flex": 38.27
+    },
+    "q_deg": {
+      "q1": -4.06,
+      "q2": 84.73,
+      "q3": -138.25,
+      "q4": -128.27
+    },
+    "fk": [
+      0.1455877073978944,
+      0.004933435369529095,
+      -0.0003505567015585663
+    ],
+    "fk_delta": [
+      -0.05841229260210562,
+      0.3069334353695291,
+      -0.0003505567015585663
+    ],
+    "dominant": "+Y"
+  },
+  "BACKWARD": {
+    "raw_delta": {
+      "shoulder_pan": -31,
+      "shoulder_lift": 466,
+      "elbow_flex": 3513,
+      "elbow_super_flex": 117
+    },
+    "deg": {
+      "shoulder_pan": -2.8,
+      "shoulder_lift": 41.0,
+      "elbow_flex": 308.85,
+      "elbow_super_flex": 10.32
+    },
+    "q_deg": {
+      "q1": -2.8,
+      "q2": -41.0,
+      "q3": -398.85,
+      "q4": -100.32
+    },
+    "fk": [
+      0.19263965883597323,
+      -0.46005264917393757,
+      0.02249089631729658
+    ],
+    "fk_delta": [
+      -0.011360341164026788,
+      -0.15805264917393758,
+      0.02249089631729658
+    ],
+    "dominant": "-Y"
+  },
+  "LEFT": {
+    "raw_delta": {
+      "shoulder_pan": 724,
+      "shoulder_lift": 182,
+      "elbow_flex": -350,
+      "elbow_super_flex": 133
+    },
+    "deg": {
+      "shoulder_pan": 63.7,
+      "shoulder_lift": 16.08,
+      "elbow_flex": -30.76,
+      "elbow_super_flex": 11.72
+    },
+    "q_deg": {
+      "q1": 63.7,
+      "q2": -16.08,
+      "q3": -59.24,
+      "q4": -101.72
+    },
+    "fk": [
+      0.2659235601493032,
+      -0.16302977111648476,
+      -0.32985435191135276
+    ],
+    "fk_delta": [
+      0.06192356014930317,
+      0.13897022888351523,
+      -0.32985435191135276
+    ],
+    "dominant": "-Z"
+  },
+  "RIGHT": {
+    "raw_delta": {
+      "shoulder_pan": -596,
+      "shoulder_lift": 187,
+      "elbow_flex": -344,
+      "elbow_super_flex": 71
+    },
+    "deg": {
+      "shoulder_pan": -52.4,
+      "shoulder_lift": 16.52,
+      "elbow_flex": -30.24,
+      "elbow_super_flex": 6.32
+    },
+    "q_deg": {
+      "q1": -52.4,
+      "q2": -16.52,
+      "q3": -59.76,
+      "q4": -96.32
+    },
+    "fk": [
+      0.2616126826603534,
+      -0.23194593490531937,
+      0.30123466480753824
+    ],
+    "fk_delta": [
+      0.05761268266035341,
+      0.07005406509468062,
+      0.30123466480753824
+    ],
+    "dominant": "+Z"
+  },
+  "UP": {
+    "raw_delta": {
+      "shoulder_pan": -44,
+      "shoulder_lift": -182,
+      "elbow_flex": 3492,
+      "elbow_super_flex": -181
+    },
+    "deg": {
+      "shoulder_pan": -3.89,
+      "shoulder_lift": -16.01,
+      "elbow_flex": 306.99,
+      "elbow_super_flex": -15.96
+    },
+    "q_deg": {
+      "q1": -3.89,
+      "q2": 16.01,
+      "q3": -396.99,
+      "q4": -74.04
+    },
+    "fk": [
+      0.5671610689117315,
+      -0.17143958994995032,
+      0.011653525791001618
+    ],
+    "fk_delta": [
+      0.36316106891173144,
+      0.13056041005004967,
+      0.011653525791001618
+    ],
+    "dominant": "+X"
+  },
+  "DOWN": {
+    "raw_delta": {
+      "shoulder_pan": 48,
+      "shoulder_lift": 974,
+      "elbow_flex": 3518,
+      "elbow_super_flex": -176
+    },
+    "deg": {
+      "shoulder_pan": 4.29,
+      "shoulder_lift": 85.69,
+      "elbow_flex": 309.23,
+      "elbow_super_flex": -15.52
+    },
+    "q_deg": {
+      "q1": 4.29,
+      "q2": -85.69,
+      "q3": -399.23,
+      "q4": -74.48
+    },
+    "fk": [
+      -0.18085627445250185,
+      -0.45842105100404673,
+      -0.03434941864890235
+    ],
+    "fk_delta": [
+      -0.38485627445250187,
+      -0.15642105100404674,
+      -0.03434941864890235
+    ],
+    "dominant": "-X"
+  },
+  "ONLY_JOINT1_POS": {
+    "raw_delta": {
+      "shoulder_pan": 538,
+      "shoulder_lift": 66,
+      "elbow_flex": 97,
+      "elbow_super_flex": -134
+    },
+    "deg": {
+      "shoulder_pan": 47.34,
+      "shoulder_lift": 5.88,
+      "elbow_flex": 8.61,
+      "elbow_super_flex": -11.83
+    },
+    "q_deg": {
+      "q1": 47.34,
+      "q2": -5.88,
+      "q3": -98.61,
+      "q4": -78.17
+    },
+    "fk": [
+      0.13224891773906067,
+      -0.2120917775015965,
+      -0.23014685497786236
+    ],
+    "fk_delta": [
+      -0.07175108226093935,
+      0.0899082224984035,
+      -0.23014685497786236
+    ],
+    "dominant": "-Z"
+  },
+  "ONLY_JOINT2": {
+    "raw_delta": {
+      "shoulder_pan": 41,
+      "shoulder_lift": -609,
+      "elbow_flex": 535,
+      "elbow_super_flex": -148
+    },
+    "deg": {
+      "shoulder_pan": 3.67,
+      "shoulder_lift": -53.53,
+      "elbow_flex": 47.11,
+      "elbow_super_flex": -13.04
+    },
+    "q_deg": {
+      "q1": 3.67,
+      "q2": 53.53,
+      "q3": -137.11,
+      "q4": -76.96
+    },
+    "fk": [
+      0.1414163814182723,
+      -0.13969030289717432,
+      -0.008959730356466982
+    ],
+    "fk_delta": [
+      -0.0625836185817277,
+      0.16230969710282567,
+      -0.008959730356466982
+    ],
+    "dominant": "+Y"
+  },
+  "ONLY_JOINT3": {
+    "raw_delta": {
+      "shoulder_pan": 167,
+      "shoulder_lift": -119,
+      "elbow_flex": 474,
+      "elbow_super_flex": -165
+    },
+    "deg": {
+      "shoulder_pan": 14.74,
+      "shoulder_lift": -10.47,
+      "elbow_flex": 41.75,
+      "elbow_super_flex": -14.55
+    },
+    "q_deg": {
+      "q1": 14.74,
+      "q2": 10.47,
+      "q3": -131.75,
+      "q4": -75.45
+    },
+    "fk": [
+      0.058516713330087025,
+      -0.1752711658952045,
+      -0.046125880921524906
+    ],
+    "fk_delta": [
+      -0.145483286669913,
+      0.1267288341047955,
+      -0.046125880921524906
+    ],
+    "dominant": "-X"
+  },
+  "ONLY_JOINT4": {
+    "raw_delta": {
+      "shoulder_pan": 19,
+      "shoulder_lift": 250,
+      "elbow_flex": 3527,
+      "elbow_super_flex": 714
+    },
+    "deg": {
+      "shoulder_pan": 1.74,
+      "shoulder_lift": 22.05,
+      "elbow_flex": 310.08,
+      "elbow_super_flex": 62.79
+    },
+    "q_deg": {
+      "q1": 1.74,
+      "q2": -22.05,
+      "q3": -400.08,
+      "q4": -152.79
+    },
+    "fk": [
+      0.33921425723352316,
+      -0.2939578948257494,
+      -0.008911017005870913
+    ],
+    "fk_delta": [
+      0.13521425723352315,
+      0.00804210517425058,
+      -0.008911017005870913
+    ],
+    "dominant": "+X"
+  }
+}

@@ -1,0 +1,115 @@
+# AXE4 Teleoperator Arm - Kinematic Description
+# Extracted from CAD design spreadsheet
+
+arm_name: axe4_teleop_v2
+
+motors:
+  shoulder_pan:
+    id: 1
+    model: sts3215
+    home_angle_deg: 0
+  shoulder_lift:
+    id: 2
+    model: sts3215
+    home_angle_deg: 0
+  elbow_flex:
+    id: 3
+    model: sts3215
+    home_angle_deg: 0
+  elbow_super_flex:
+    id: 4
+    model: sts3215
+    home_angle_deg: 90
+
+links:
+  - link: 1
+    name: 98_TA_servo_Feetech_STS3215_r0c1
+    joint: 1
+    type: revolute
+    axis: y
+    angle_reference: home
+    min_angle_deg: -120
+    max_angle_deg: 120
+
+  - link: 2
+    name: 100_TA_shoulder_pan_servo_adapter_Rotation_Pitch_SO101_r0c1
+    type: fixed
+    axis: y
+    length_mm: 30.64
+
+  - link: 3
+    name: 98_TA_servo_Feetech_STS3215_r0c2
+    type: fixed
+    axis: y
+    length_mm: 72.32
+
+  - link: 4
+    name: 103_TA_link_arm_servo_base_mount_r1c1
+    joint: 2
+    type: revolute
+    axis: x
+    angle_reference: home
+    min_angle_deg: 0
+    max_angle_deg: 180
+
+  - link: 5
+    name: 98_TA_servo_Feetech_STS3215_r0c3
+    type: fixed
+    axis: z
+    length_mm: -248.82
+
+  - link: 6
+    name: 103_TA_link_arm_servo_base_mount_r1c2
+    type: fixed
+    axis: y
+    length_mm: 32.4
+
+  - link: 7
+    name: 98_TA_servo_Feetech_STS3215_r0c4
+    joint: 3
+    type: revolute
+    axis: x
+    angle_reference: home
+    min_angle_deg: 0
+    max_angle_deg: 135
+
+  - link: 8
+    name: 66_TA_universal_joint_yoke_model_r0c1
+    type: fixed
+    axis: y
+    length_mm: 281.51
+
+  - link: 9
+    type: fixed
+    axis: y
+    length_mm: -16.66
+
+  - link: 10
+    joint: 4
+    type: revolute
+    axis: x
+    angle_reference: folded_over
+    min_angle_deg: 0
+    max_angle_deg: 135
+
+  - link: 11
+    type: fixed
+    axis: y
+    length_mm: -265.85
+
+  - link: 12
+    type: fixed
+    axis: z
+    length_mm: 11.67
+
+# Derived segment lengths (for FK)
+segments:
+  base_to_shoulder_mm: 102.96    # links 2+3: 30.64 + 72.32
+  upper_arm_mm: 248.82           # link 5 (primary), link 6 (32.4mm offset)
+  forearm_mm: 281.51             # link 8 (primary), link 9 (-16.66mm offset)
+  handle_mm: 265.85             # link 11 (primary), link 12 (11.67mm offset)
+
+end_effector_home_position_mm:
+  x: 0
+  y: -75
+  z: -177.79

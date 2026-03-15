@@ -1,15 +1,11 @@
 #!/usr/bin/env python
 
-#mimic mathias Desrochers eltopchi1@gmail.com
+# MISC Robotics - Achal Patel achalypatel3403@gmail.com
+# MISC Robotics - Mathias Desrochers eltopchi1@gmail.com
 
 import logging
 import time
-import socket
-import struct
-import json
 import numpy as np
-import math
-from pathlib import Path
 
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.feetech import (
@@ -20,36 +16,17 @@ from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnected
 
 from ..teleoperator import Teleoperator
 from .config_axe4_leader import axe4LeaderConfig
+from .handle_reader import HandleReader, LegacyIMUReader
+from .transport import create_transport
+from .fk import load_motor_cfg, motor_deg_to_angles, forward_kinematics
 
 logger = logging.getLogger(__name__)
-
-AXE4_AXIS_CALIBRATION_PATH = Path("tester_eef/axe4_axis_calibration.json")
-# Single source of motion tuning is AXE4 leader (this file).
-# Keep ROS2-side gains as pass-through as much as possible.
-#
-"""
-DEADZONE_M
- - increase if robot moves when your hand is still (filters jitter)
- - decrease if small intentional movements are ignored
-SPEED_SCALE
- - main sensitivity knob
- - increase for more response, decrease for slower safer motion
-MAX_DELTA_CMD_M
- - hard safety clamp per axis
- - increase only if you need more peak speed
-"""
-# DEADZONE_M: ignore tiny hand jitter below this Cartesian delta (meters/sample).
-DEADZONE_M = 0.001
-# SPEED_SCALE: scales measured hand delta to UDP command magnitude.
-SPEED_SCALE = 1.5
-# MAX_DELTA_CMD_M: hard per-axis clamp on outgoing UDP XYZ command.
-MAX_DELTA_CMD_M = 0.03
 
 
 class axe4Leader(Teleoperator):
     """
-    SO-101 Leader Arm designed by TheRobotStudio and Hugging Face.
-    Modified to include IMU data via UDP.
+    AXE4 leader: 4× STS3215 + BLE handle (IMU). Pose from planar FK + handle quaternion.
+    Publishes: eef_pose, eef_position, eef_twist (deltas), imu, joy.
     """
 
     config_class = axe4LeaderConfig
@@ -58,55 +35,40 @@ class axe4Leader(Teleoperator):
     def __init__(self, config: axe4LeaderConfig):
         super().__init__(config)
         self.config = config
-        norm_mode_body = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
-        
-        # 1. Setup Motors
+        norm_mode = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
+
         self.bus = FeetechMotorsBus(
             port=self.config.port,
             motors={
-                "shoulder_pan": Motor(1, "sts3215", norm_mode_body),
-                "shoulder_lift": Motor(2, "sts3215", norm_mode_body),
-                "elbow_flex": Motor(3, "sts3215", norm_mode_body),
-                "elbow_super_flex": Motor(4, "sts3215", norm_mode_body),
+                "shoulder_pan": Motor(1, "sts3215", norm_mode),
+                "shoulder_lift": Motor(2, "sts3215", norm_mode),
+                "elbow_flex": Motor(3, "sts3215", norm_mode),
+                "elbow_super_flex": Motor(4, "sts3215", norm_mode),
             },
             calibration=self.calibration,
         )
 
-        # 2. Setup UDP for IMU
-        # We bind to the IP/Port to listen for data from the C++ script
-        self.imu_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.imu_sock.bind((self.config.imu_ip, self.config.imu_port))
-        self.imu_sock.setblocking(False) # Non-blocking to avoid freezing the robot
-        
-        # Default IMU state (Identity Quaternion w=1, x=0, y=0, z=0)
-        self.latest_imu_data = [1.0, 0.0, 0.0, 0.0]
+        if config.handle_source == "ble":
+            self._handle = HandleReader(device_name=config.handle_device_name)
+        else:
+            self._handle = LegacyIMUReader(ip=config.imu_ip, port=config.imu_port)
+
+        self._transport = create_transport(
+            config.transport,
+            udp_ip=config.udp_target_ip,
+            udp_port=config.udp_target_port,
+            udp_pose_only=getattr(config, "udp_pose_only", True),
+        )
+
+        self._motor_cfg = load_motor_cfg()
         self._home_xyz = None
-        self._prev_rel_xyz = np.zeros(3, dtype=np.float32)
-        self._smoothed_delta = np.zeros(3, dtype=np.float32)
-        self._deadband = DEADZONE_M
-        self._smooth_alpha = 0.35
-        self._delta_scale = SPEED_SCALE
-        self._max_delta_cmd = MAX_DELTA_CMD_M
-        self._output_axis_map = np.eye(3, dtype=np.float32)
-        self._load_axis_calibration()
+        self._prev_xyz = None
 
-    def _load_axis_calibration(self) -> None:
-        try:
-            if not AXE4_AXIS_CALIBRATION_PATH.exists():
-                return
-            with AXE4_AXIS_CALIBRATION_PATH.open("r", encoding="utf-8") as f:
-                calib = json.load(f)
-            if "output_axis_map" in calib:
-                mat = np.array(calib["output_axis_map"], dtype=np.float32)
-                if mat.shape == (3, 3):
-                    self._output_axis_map = mat
-            logger.info(f"Loaded axis calibration from {AXE4_AXIS_CALIBRATION_PATH}")
-        except Exception as e:
-            logger.warning(f"Failed to load axis calibration: {e}")
-
+    # ------------------------------------------------------------------
+    # Teleoperator interface
+    # ------------------------------------------------------------------
     @property
     def action_features(self) -> dict[str, type]:
-        # We define the 3 motors AND the 4 quaternion values
         features = {f"{motor}.pos": float for motor in self.bus.motors}
         features["imu.qw"] = float
         features["imu.qx"] = float
@@ -129,12 +91,17 @@ class axe4Leader(Teleoperator):
         self.bus.connect()
         if not self.is_calibrated and calibrate:
             logger.info(
-                "Mismatch between calibration values in the motor and the calibration file or no calibration file found"
+                "Mismatch between calibration values in the motor and the calibration file "
+                "or no calibration file found"
             )
             self.calibrate()
 
         self.configure()
-        logger.info(f"{self} connected. Listening for IMU on {self.config.imu_ip}:{self.config.imu_port}")
+        self._handle.start()
+        logger.info(
+            f"{self} connected.  handle_source={self.config.handle_source}  "
+            f"transport={self.config.transport}"
+        )
 
     @property
     def is_calibrated(self) -> bool:
@@ -143,7 +110,8 @@ class axe4Leader(Teleoperator):
     def calibrate(self) -> None:
         if self.calibration:
             user_input = input(
-                f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
+                f"Press ENTER to use provided calibration file associated with the id {self.id}, "
+                "or type 'c' and press ENTER to run calibration: "
             )
             if user_input.strip().lower() != "c":
                 logger.info(f"Writing calibration file associated with the id {self.id} to the motors")
@@ -190,160 +158,68 @@ class axe4Leader(Teleoperator):
             self.bus.setup_motor(motor)
             print(f"'{motor}' motor id set to {self.bus.motors[motor].id}")
 
+    # ------------------------------------------------------------------
+    # Main action loop
+    # ------------------------------------------------------------------
     def get_action(self) -> dict[str, float]:
         start = time.perf_counter()
-        
-        # 1. Read Motors
-        raw_action = self.bus.sync_read("Present_Position")
-        # action = {f"{motor}.pos": val for motor, val in action.items()}
+        motor_degrees = self.bus.sync_read("Present_Position")
+        q = motor_deg_to_angles(motor_degrees, self._motor_cfg)
+        raw_xyz, _ = forward_kinematics(*q)
+        raw_xyz = np.asarray(raw_xyz, dtype=np.float32)
 
-        x, y, z = self.compute_forward_kinematics(raw_action)
-        raw_xyz = np.array([x, y, z], dtype=np.float32)
         if self._home_xyz is None:
             self._home_xyz = raw_xyz.copy()
-            self._prev_rel_xyz = np.zeros(3, dtype=np.float32)
-            self._smoothed_delta = np.zeros(3, dtype=np.float32)
+            self._prev_xyz = raw_xyz.copy()
 
         rel_xyz = raw_xyz - self._home_xyz
-        delta_xyz = rel_xyz - self._prev_rel_xyz
-        self._prev_rel_xyz = rel_xyz
+        delta_xyz = raw_xyz - self._prev_xyz
+        self._prev_xyz = raw_xyz.copy()
 
-        delta_xyz[np.abs(delta_xyz) < self._deadband] = 0.0
-        self._smoothed_delta = (
-            (1.0 - self._smooth_alpha) * self._smoothed_delta + self._smooth_alpha * delta_xyz
+        hs = self._handle.state
+
+        self._transport.publish_eef_pose(
+            rel_xyz[0], rel_xyz[1], rel_xyz[2],
+            hs.qw, hs.qx, hs.qy, hs.qz,
         )
-        cmd_xyz = np.clip(
-            self._smoothed_delta * self._delta_scale,
-            -self._max_delta_cmd,
-            self._max_delta_cmd,
+        self._transport.publish_eef_position(rel_xyz[0], rel_xyz[1], rel_xyz[2])
+        self._transport.publish_eef_twist(delta_xyz[0], delta_xyz[1], delta_xyz[2], 0.0, 0.0, 0.0)
+        self._transport.publish_imu(
+            hs.qw, hs.qx, hs.qy, hs.qz,
+            hs.roll, hs.pitch, hs.yaw,
         )
-        cmd_xyz = self._output_axis_map @ cmd_xyz
-        
-        # 2. Read IMU (Drain the buffer to get the latest packet)
-        try:
-            while True:
-                # 4 floats = 16 bytes
-                data, _ = self.imu_sock.recvfrom(16)
-                # Unpack 4 floats (f f f f)
-                self.latest_imu_data = struct.unpack('4f', data)
-        except BlockingIOError:
-            # No more data in buffer, use the latest known value
-            pass
-        except Exception as e:
-            logger.warning(f"UDP Read Error: {e}")
-
-
+        self._transport.publish_buttons(hs.sw, hs.sw2, hs.joy_x, hs.joy_y, hs.joy_z)
 
         action = {
-            "x": float(cmd_xyz[0]),
-            "y": float(cmd_xyz[1]),
-            "z": float(cmd_xyz[2]),
-            "imu.qw": self.latest_imu_data[0],
-            "imu.qx": self.latest_imu_data[1],
-            "imu.qy": self.latest_imu_data[2],
-            "imu.qz": self.latest_imu_data[3],
+            "x": float(rel_xyz[0]),
+            "y": float(rel_xyz[1]),
+            "z": float(rel_xyz[2]),
+            "pos_x": float(rel_xyz[0]),
+            "pos_y": float(rel_xyz[1]),
+            "pos_z": float(rel_xyz[2]),
+            "imu.qw": hs.qw,
+            "imu.qx": hs.qx,
+            "imu.qy": hs.qy,
+            "imu.qz": hs.qz,
         }
-
-
-
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read action: {dt_ms:.1f}ms")
         return action
 
     def send_feedback(self, feedback: dict[str, float]) -> None:
-        # TODO(rcadene, aliberts): Implement force feedback
         raise NotImplementedError
 
     def disconnect(self) -> None:
         if not self.is_connected:
-            DeviceNotConnectedError(f"{self} is not connected.")
+            raise DeviceNotConnectedError(f"{self} is not connected.")
 
         self.bus.disconnect()
-        if hasattr(self, 'imu_sock'):
-            self.imu_sock.close()
-            
+        self._handle.stop()
+        self._transport.shutdown()
         logger.info(f"{self} disconnected.")
 
-
-
-    
-    def compute_forward_kinematics(self, joints_degrees):
-            """
-            Computes the X, Y, Z position of the end effector.
-            Input: Dictionary with 'shoulder_pan', 'shoulder_lift', 'elbow_flex' in DEGREES.
-            Output: (x, y, z) tuple in METERS.
-            """
-            
-
-            #0 defining coordinat sys
-            """
-            Origin (0,0,0): The center of the Base Motor (Motor 1)
-
-            using the handle has the refernce direction 
-
-            Z-Axis (+): Points UP (towards the ceiling).
-            X-Axis (+): Points FORWARD (towards your computer/workspace).
-            Y-Axis (+): Points LEFT (following the Right-Hand Rule).
-
-
-        
-            """
-            offset_shoulder = 0.0 
-            offset_elbow1   = -90.0  # Tells math: "0 degrees means bent 90 degrees"
-            offset_elbow2   = -90.0
-            
-
-            # 1. Convert to Radians
-            # Note: We negate some angles if the rotation direction is opposite to standard right-hand rule.
-            # usually: Pan (+) = Left, Lift (+) = Down/Forward, Elbow (+) = Down/In
-            q1 = np.radians(joints_degrees["shoulder_pan"])
-            q2 = np.radians(-1 * joints_degrees["shoulder_lift"] + offset_shoulder)
-            q3 = np.radians(-1 * joints_degrees["elbow_flex"] + offset_elbow1)
-            q4 = np.radians(-1* joints_degrees["elbow_super_flex"] +offset_elbow2)
-
-            # v1 = np.array([0.075, -0.02, 0]) # x,y,z
-            # v2 = np.array([0.255, -0.03, 0])
-            # v3 = np.array([-0.03, -0.255, 0])
-            # v4 = np.array([-0.315, 0, 0])  # to teh EEF which is the cneter of rotation of teh u joint
-            # Measure the actual length of the black tubes + plastic parts
-            # Let's assume 25.5cm and 31.5cm based on your previous numbers.
-            v1 = np.array([0.075, -0.02, 0])   # Base offset (Keep this)
-            v2 = np.array([0.255, 0.0, 0.0])   # Link 1: Just a 25cm stick
-            v3 = np.array([0.255, 0.0, 0.0])   # Link 2: Just a 25cm stick
-            v4 = np.array([0.120, 0.0, 0.0])   # Handle: Just a 12cm stick
-            #axis 2-4 are versitcal on the z in that set up
-            p1 = v1
-            p2 = rot_z(q2) @ v2
-            p3 = rot_z(q2 + q3) @ v3
-            p4 = rot_z(q2 + q3 + q4) @ v4
-
-            arm_in_2d_plane = p1 + p2 + p3 + p4
-            #base axis is horizontale on that set up
-            final_pos = rot_x(q1) @ arm_in_2d_plane
-
-            # 4. Apply Pan Rotation (Joint 1)
-            x_final = final_pos[0]
-            y_final = final_pos[1]
-            z_final = final_pos[2]
-
-            return x_final, y_final, z_final
-    
-def rot_z(ang):
-    #rotate vector arrnd y axis
-    c = np.cos(ang)
-    s = np.sin(ang)
-    return np.array([
-        [c, -s, 0],
-        [s, c, 0],
-        [0, 0, 1]
-    ])
-
-def rot_x(ang):
-    #rotate vector arrnd y axis
-    c = np.cos(ang)
-    s = np.sin(ang)
-    return np.array([
-        [1, 0, 0],
-        [0, c, -s],
-        [0, s, c]
-    ])
+    def compute_forward_kinematics(self, joints_degrees: dict[str, float]) -> tuple[float, float, float]:
+        """Motor degrees -> (x, y, z) in m. Frame: X fwd, Y left, Z up. Uses planar FK + motor_cfg."""
+        q = motor_deg_to_angles(joints_degrees, self._motor_cfg)
+        eef, _ = forward_kinematics(*q)
+        return float(eef[0]), float(eef[1]), float(eef[2])

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-#mimic mathias Desrochers eltopchi1@gmail.com
+# mimic robotics Achal Patel achalypatel3403@gmail.com
+# mimic robotics Mathias Desrochers eltopchi1@gmail.com
 
 from dataclasses import dataclass, field
 
