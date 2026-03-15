@@ -1,0 +1,63 @@
+{
+  "output_axis_map": [
+    [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    [
+      1.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "deadband": 0.001,
+  "speed_scale": 0.6,
+  "max_delta_cmd": 0.03,
+  "direction_report": {
+    "FORWARD": {
+      "fk_delta_xyz": [
+        0.016130492091178894,
+        -0.02964445948600769,
+        -0.008634726516902447
+      ],
+      "joint_delta_raw": {
+        "shoulder_pan": 18.47222222222217,
+        "shoulder_lift": 69.18055555555566,
+        "elbow_flex": -114.0,
+        "elbow_super_flex": 26.569444444444343
+      }
+    },
+    "LEFT": {
+      "fk_delta_xyz": [
+        -0.23900428414344788,
+        0.1431485414505005,
+        -0.4757795035839081
+      ],
+      "joint_delta_raw": {
+        "shoulder_pan": 847.7638888888887,
+        "shoulder_lift": 739.9027777777778,
+        "elbow_flex": -500.0,
+        "elbow_super_flex": -265.0
+      }
+    },
+    "UP": {
+      "fk_delta_xyz": [
+        0.33699995279312134,
+        0.16942623257637024,
+        0.006486067082732916
+      ],
+      "joint_delta_raw": {
+        "shoulder_pan": -40.0,
+        "shoulder_lift": -359.125,
+        "elbow_flex": -399.30555555555566,
+        "elbow_super_flex": -378.0
+      }
+    }
+  }
+}

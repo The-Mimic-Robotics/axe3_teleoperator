@@ -6,8 +6,10 @@ import logging
 import time
 import socket
 import struct
+import json
 import numpy as np
 import math
+from pathlib import Path
 
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.feetech import (
@@ -20,6 +22,28 @@ from ..teleoperator import Teleoperator
 from .config_axe4_leader import axe4LeaderConfig
 
 logger = logging.getLogger(__name__)
+
+AXE4_AXIS_CALIBRATION_PATH = Path("tester_eef/axe4_axis_calibration.json")
+# Single source of motion tuning is AXE4 leader (this file).
+# Keep ROS2-side gains as pass-through as much as possible.
+#
+"""
+DEADZONE_M
+ - increase if robot moves when your hand is still (filters jitter)
+ - decrease if small intentional movements are ignored
+SPEED_SCALE
+ - main sensitivity knob
+ - increase for more response, decrease for slower safer motion
+MAX_DELTA_CMD_M
+ - hard safety clamp per axis
+ - increase only if you need more peak speed
+"""
+# DEADZONE_M: ignore tiny hand jitter below this Cartesian delta (meters/sample).
+DEADZONE_M = 0.001
+# SPEED_SCALE: scales measured hand delta to UDP command magnitude.
+SPEED_SCALE = 1.5
+# MAX_DELTA_CMD_M: hard per-axis clamp on outgoing UDP XYZ command.
+MAX_DELTA_CMD_M = 0.03
 
 
 class axe4Leader(Teleoperator):
@@ -56,6 +80,29 @@ class axe4Leader(Teleoperator):
         
         # Default IMU state (Identity Quaternion w=1, x=0, y=0, z=0)
         self.latest_imu_data = [1.0, 0.0, 0.0, 0.0]
+        self._home_xyz = None
+        self._prev_rel_xyz = np.zeros(3, dtype=np.float32)
+        self._smoothed_delta = np.zeros(3, dtype=np.float32)
+        self._deadband = DEADZONE_M
+        self._smooth_alpha = 0.35
+        self._delta_scale = SPEED_SCALE
+        self._max_delta_cmd = MAX_DELTA_CMD_M
+        self._output_axis_map = np.eye(3, dtype=np.float32)
+        self._load_axis_calibration()
+
+    def _load_axis_calibration(self) -> None:
+        try:
+            if not AXE4_AXIS_CALIBRATION_PATH.exists():
+                return
+            with AXE4_AXIS_CALIBRATION_PATH.open("r", encoding="utf-8") as f:
+                calib = json.load(f)
+            if "output_axis_map" in calib:
+                mat = np.array(calib["output_axis_map"], dtype=np.float32)
+                if mat.shape == (3, 3):
+                    self._output_axis_map = mat
+            logger.info(f"Loaded axis calibration from {AXE4_AXIS_CALIBRATION_PATH}")
+        except Exception as e:
+            logger.warning(f"Failed to load axis calibration: {e}")
 
     @property
     def action_features(self) -> dict[str, type]:
@@ -151,6 +198,26 @@ class axe4Leader(Teleoperator):
         # action = {f"{motor}.pos": val for motor, val in action.items()}
 
         x, y, z = self.compute_forward_kinematics(raw_action)
+        raw_xyz = np.array([x, y, z], dtype=np.float32)
+        if self._home_xyz is None:
+            self._home_xyz = raw_xyz.copy()
+            self._prev_rel_xyz = np.zeros(3, dtype=np.float32)
+            self._smoothed_delta = np.zeros(3, dtype=np.float32)
+
+        rel_xyz = raw_xyz - self._home_xyz
+        delta_xyz = rel_xyz - self._prev_rel_xyz
+        self._prev_rel_xyz = rel_xyz
+
+        delta_xyz[np.abs(delta_xyz) < self._deadband] = 0.0
+        self._smoothed_delta = (
+            (1.0 - self._smooth_alpha) * self._smoothed_delta + self._smooth_alpha * delta_xyz
+        )
+        cmd_xyz = np.clip(
+            self._smoothed_delta * self._delta_scale,
+            -self._max_delta_cmd,
+            self._max_delta_cmd,
+        )
+        cmd_xyz = self._output_axis_map @ cmd_xyz
         
         # 2. Read IMU (Drain the buffer to get the latest packet)
         try:
@@ -168,9 +235,9 @@ class axe4Leader(Teleoperator):
 
 
         action = {
-            "x": x,
-            "y": y,
-            "z": z,
+            "x": float(cmd_xyz[0]),
+            "y": float(cmd_xyz[1]),
+            "z": float(cmd_xyz[2]),
             "imu.qw": self.latest_imu_data[0],
             "imu.qx": self.latest_imu_data[1],
             "imu.qy": self.latest_imu_data[2],

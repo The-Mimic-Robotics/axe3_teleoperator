@@ -9,11 +9,12 @@ import mujoco.viewer
 # --- CONFIGURATION ---
 UDP_IP = "127.0.0.1"
 UDP_PORT = 5005
+MAX_DELTA_STEP = 0.01
 
 # Shared state between UDP thread and Simulation
 # [x, y, z, qw, qx, qy, qz]
 # Default to z=0.5 so it doesn't spawn inside the floor
-current_pose = [0.0, 0.0, 0.5, 1.0, 0.0, 0.0, 0.0]
+current_cmd = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
 lock = threading.Lock()
 running = True
 
@@ -55,7 +56,7 @@ xml_string = """
 
 def udp_listener():
     """Background thread to receive UDP packets continuously."""
-    global current_pose, running
+    global current_cmd, running
     
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((UDP_IP, UDP_PORT))
@@ -71,7 +72,7 @@ def udp_listener():
                 values = struct.unpack('<fffffff', data)
                 
                 with lock:
-                    current_pose = list(values)
+                    current_cmd = list(values)
                     
         except socket.timeout:
             continue
@@ -100,11 +101,17 @@ def main():
             while viewer.is_running():
                 # --- SYNC UDP DATA TO SIMULATION ---
                 with lock:
-                    # MuJoCo freejoint qpos structure: [x, y, z, w, x, y, z]
-                    # Your UDP data matches this order: pos(3) + quat(4)
-                    
-                    # We assign the received values directly to the joint position
-                    data.qpos[0:7] = current_pose
+                    cmd = current_cmd.copy()
+
+                # Delta command mode:
+                # Integrate XYZ commands so this tester matches velocity-style teleop.
+                delta = np.array(cmd[:3], dtype=np.float32)
+                delta = np.clip(delta, -MAX_DELTA_STEP, MAX_DELTA_STEP)
+                data.qpos[0:3] += delta
+                data.qpos[0] = float(np.clip(data.qpos[0], -1.0, 1.0))
+                data.qpos[1] = float(np.clip(data.qpos[1], -1.0, 1.0))
+                data.qpos[2] = float(np.clip(data.qpos[2], 0.05, 1.5))
+                data.qpos[3:7] = np.array(cmd[3:7], dtype=np.float32)
 
                 # Step the simulation (calculates velocities/accelerations, though we are teleporting)
                 mujoco.mj_forward(model, data)
