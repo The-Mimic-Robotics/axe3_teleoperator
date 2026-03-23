@@ -1,10 +1,20 @@
 #!/usr/bin/env python
+"""
+AXE4 leader teleoperator: 4× STS3215 arm + BLE handle (IMU + joystick).
+
+Pose from planar 3-link + pan FK (fk.py); orientation from handle quaternion.
+Publishes eef_pose, eef_position, eef_twist (deltas), imu, joy via ROS2 or UDP.
+"""
 
 # MISC Robotics - Achal Patel achalypatel3403@gmail.com
 # MISC Robotics - Mathias Desrochers eltopchi1@gmail.com
 
 import logging
+import select
+import sys
+import termios
 import time
+import tty
 import numpy as np
 
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
@@ -23,10 +33,59 @@ from .fk import load_motor_cfg, motor_deg_to_angles, forward_kinematics
 logger = logging.getLogger(__name__)
 
 
+class _ArmingKeyReader:
+    """Non-blocking single-key reader for terminal arming toggle."""
+
+    def __init__(self, key: str):
+        self._key = (key or "t")[0]
+        self._enabled = sys.stdin.isatty()
+        self._fd = None
+        self._old_term = None
+        if self._enabled:
+            try:
+                self._fd = sys.stdin.fileno()
+                self._old_term = termios.tcgetattr(self._fd)
+                tty.setcbreak(self._fd)
+            except Exception as e:
+                logger.warning(f"Failed to enable arm key reader: {e}")
+                self._enabled = False
+                self._fd = None
+                self._old_term = None
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def poll_toggle(self) -> bool:
+        if not self._enabled or self._fd is None:
+            return False
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], 0.0)
+            if not ready:
+                return False
+            ch = sys.stdin.read(1)
+            return ch.lower() == self._key.lower()
+        except Exception:
+            return False
+
+    def close(self) -> None:
+        if self._enabled and self._fd is not None and self._old_term is not None:
+            try:
+                termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_term)
+            except Exception:
+                pass
+        self._enabled = False
+        self._fd = None
+        self._old_term = None
+
+
 class axe4Leader(Teleoperator):
     """
     AXE4 leader: 4× STS3215 + BLE handle (IMU). Pose from planar FK + handle quaternion.
     Publishes: eef_pose, eef_position, eef_twist (deltas), imu, joy.
+
+    On first get_action(), current EEF position is taken as home; subsequent
+    positions are reported relative to home (rel_xyz) and as deltas (delta_xyz).
     """
 
     config_class = axe4LeaderConfig
@@ -63,6 +122,14 @@ class axe4Leader(Teleoperator):
         self._motor_cfg = load_motor_cfg()
         self._home_xyz = None
         self._prev_xyz = None
+        self._cmd_xyz = None
+        self._armed = not bool(getattr(self.config, "require_arm_key", False))
+        self._arm_reader = None
+        if getattr(self.config, "require_arm_key", False):
+            self._arm_reader = _ArmingKeyReader(getattr(self.config, "arm_key", "t"))
+            if not self._arm_reader.enabled:
+                logger.warning("Arm-key gating requested but stdin is not interactive; teleop will start armed.")
+                self._armed = True
 
     # ------------------------------------------------------------------
     # Teleoperator interface
@@ -98,6 +165,11 @@ class axe4Leader(Teleoperator):
 
         self.configure()
         self._handle.start()
+        if self._arm_reader and self._arm_reader.enabled:
+            logger.info(
+                f"Teleop DISARMED. Press '{self.config.arm_key}' to arm and capture home; "
+                f"press again to disarm/pause."
+            )
         logger.info(
             f"{self} connected.  handle_source={self.config.handle_source}  "
             f"transport={self.config.transport}"
@@ -162,19 +234,53 @@ class axe4Leader(Teleoperator):
     # Main action loop
     # ------------------------------------------------------------------
     def get_action(self) -> dict[str, float]:
+        """Read motor positions, run FK, set home on first call, publish pose/twist/imu/joy, return action dict."""
         start = time.perf_counter()
         motor_degrees = self.bus.sync_read("Present_Position")
         q = motor_deg_to_angles(motor_degrees, self._motor_cfg)
         raw_xyz, _ = forward_kinematics(*q)
         raw_xyz = np.asarray(raw_xyz, dtype=np.float32)
 
-        if self._home_xyz is None:
-            self._home_xyz = raw_xyz.copy()
-            self._prev_xyz = raw_xyz.copy()
+        if self._arm_reader and self._arm_reader.poll_toggle():
+            self._armed = not self._armed
+            if self._armed:
+                self._home_xyz = raw_xyz.copy()
+                self._cmd_xyz = np.zeros(3, dtype=np.float32)
+                self._prev_xyz = self._cmd_xyz.copy()
+                logger.info("Teleop ARMED. Home captured from current pose.")
+            else:
+                self._home_xyz = None
+                self._cmd_xyz = np.zeros(3, dtype=np.float32)
+                self._prev_xyz = self._cmd_xyz.copy()
+                logger.info("Teleop DISARMED. Publishing zero position/twist.")
 
-        rel_xyz = raw_xyz - self._home_xyz
-        delta_xyz = raw_xyz - self._prev_xyz
-        self._prev_xyz = raw_xyz.copy()
+        if not self._armed:
+            rel_xyz = np.zeros(3, dtype=np.float32)
+            delta_xyz = np.zeros(3, dtype=np.float32)
+            self._home_xyz = raw_xyz.copy()
+            self._cmd_xyz = rel_xyz.copy()
+            self._prev_xyz = rel_xyz.copy()
+        else:
+            if self._home_xyz is None:
+                self._home_xyz = raw_xyz.copy()
+                self._cmd_xyz = np.zeros(3, dtype=np.float32)
+                self._prev_xyz = self._cmd_xyz.copy()
+
+            raw_rel = raw_xyz - self._home_xyz
+            if self._cmd_xyz is None:
+                self._cmd_xyz = raw_rel.copy()
+                self._prev_xyz = self._cmd_xyz.copy()
+
+            pos_db = float(getattr(self.config, "position_deadband_m", 0.0))
+            if np.max(np.abs(raw_rel - self._cmd_xyz)) >= pos_db:
+                self._cmd_xyz = raw_rel.copy()
+            rel_xyz = self._cmd_xyz.copy()
+
+            prev_cmd = self._prev_xyz.copy()
+            delta_xyz = rel_xyz - prev_cmd
+            tw_db = float(getattr(self.config, "twist_deadband_m", 0.0))
+            delta_xyz[np.abs(delta_xyz) < tw_db] = 0.0
+            self._prev_xyz = rel_xyz.copy()
 
         hs = self._handle.state
 
@@ -216,6 +322,8 @@ class axe4Leader(Teleoperator):
         self.bus.disconnect()
         self._handle.stop()
         self._transport.shutdown()
+        if self._arm_reader:
+            self._arm_reader.close()
         logger.info(f"{self} disconnected.")
 
     def compute_forward_kinematics(self, joints_degrees: dict[str, float]) -> tuple[float, float, float]:

@@ -229,7 +229,7 @@ def main():
                 if qnorm < 1e-6:
                     quat = identity_quat.copy()
                 else:
-                    quat = quat / qnorm
+pip install draccus                    quat = quat / qnorm
 
                 if use_velocity:
                     # Velocity / twist: integrate linear part (leader sends delta per step or velocity)

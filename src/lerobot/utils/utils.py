@@ -28,7 +28,17 @@ from statistics import mean
 import numpy as np
 import torch
 from accelerate import Accelerator
-from datasets.utils.logging import disable_progress_bar, enable_progress_bar
+
+# `datasets` (and thus `pyarrow`) is optional for many runtime paths (e.g. hardware control).
+# Import it lazily / defensively so environments without compatible OpenSSL / pyarrow can still run.
+try:
+    from datasets.utils.logging import disable_progress_bar, enable_progress_bar  # type: ignore
+except Exception:  # noqa: BLE001 - intentionally broad (ImportError, binary deps like OpenSSL, etc.)
+    def disable_progress_bar():  # type: ignore
+        return None
+
+    def enable_progress_bar():  # type: ignore
+        return None
 
 
 def inside_slurm():

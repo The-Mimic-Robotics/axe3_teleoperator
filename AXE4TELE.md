@@ -153,4 +153,6 @@ Example: for **real-time EEF following**, subscribe to `/axe4/eef_twist` and pub
 | `src/axe4/config/axe4.urdf` | URDF for **visualization only** (not used in pose computation) |
 | `src/axe4/config/axe4_axis_calibration.json` | motor_cfg (signs/offsets), axis map, joint limits |
 
-nathanael mccooeye nathanaelmccooeye@gmail.com
+```bash
+ros2 launch arms_xbox_ctr axe4_controller.launch.py input_mode:=ros2 control_mode:=velocity arm_namespace:=left_arm speed:=4.0 axis_map:=fwd_away_from_base
+```
