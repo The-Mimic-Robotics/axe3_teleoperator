@@ -15,6 +15,17 @@ class PoseTransport(ABC):
 	@abstractmethod
 	def publish_eef_position(self, x: float, y: float, z: float) -> None: ...
 
+	def publish_eef_pose_absolute(
+		self, x: float, y: float, z: float,
+		qw: float, qx: float, qy: float, qz: float,
+	) -> None:
+		"""Optional absolute pose output. Default no-op for backward compatibility."""
+		pass
+
+	def publish_eef_position_absolute(self, x: float, y: float, z: float) -> None:
+		"""Optional absolute position output. Default no-op for backward compatibility."""
+		pass
+
 	@abstractmethod
 	def publish_eef_twist(
 		self, vx: float, vy: float, vz: float,

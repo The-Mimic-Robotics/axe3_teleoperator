@@ -47,11 +47,25 @@ class UDPTransport(PoseTransport):
 		pkt = struct.pack("<7f", x, y, z, qw, qx, qy, qz)
 		self._send(pkt)
 
+	def publish_eef_pose_absolute(self, x, y, z, qw, qx, qy, qz):
+		if self._pose_only:
+			return
+		# Typed packet: absolute pose
+		self._debug_print("POSE_ABS", (x, y, z, qw, qx, qy, qz))
+		self._send(self._typed_packet(b"A", "<7f", x, y, z, qw, qx, qy, qz))
+
 	def publish_eef_position(self, x, y, z):
 		if self._pose_only:
 			return
 		self._debug_print("POSITION", (x, y, z))
 		self._send(self._typed_packet(b"P", "<3f", x, y, z))
+
+	def publish_eef_position_absolute(self, x, y, z):
+		if self._pose_only:
+			return
+		# Typed packet: absolute position
+		self._debug_print("POSITION_ABS", (x, y, z))
+		self._send(self._typed_packet(b"Q", "<3f", x, y, z))
 
 	def publish_eef_twist(self, vx, vy, vz, wx=0.0, wy=0.0, wz=0.0):
 		if self._pose_only:

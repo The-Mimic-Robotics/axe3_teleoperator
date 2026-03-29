@@ -29,7 +29,9 @@ class ROS2Transport(PoseTransport):
 		self._node = rclpy.create_node(node_name)
 		prefix = topic_prefix.strip("/")
 		self._pub_pose = self._node.create_publisher(PoseStamped, f"{prefix}/eef_pose", 10)
+		self._pub_pose_abs = self._node.create_publisher(PoseStamped, f"{prefix}/eef_pose_absolute", 10)
 		self._pub_position = self._node.create_publisher(PoseStamped, f"{prefix}/eef_position", 10)
+		self._pub_position_abs = self._node.create_publisher(PoseStamped, f"{prefix}/eef_position_absolute", 10)
 		self._pub_twist = self._node.create_publisher(TwistStamped, f"{prefix}/eef_twist", 10)
 		self._pub_imu = self._node.create_publisher(Imu, f"{prefix}/imu", 10)
 		self._pub_joy = self._node.create_publisher(Joy, f"{prefix}/joy", 10)
@@ -58,6 +60,19 @@ class ROS2Transport(PoseTransport):
 		msg.pose.orientation.z = float(qz)
 		self._pub_pose.publish(msg)
 
+	def publish_eef_pose_absolute(self, x, y, z, qw, qx, qy, qz):
+		msg = PoseStamped()
+		msg.header.stamp = self._stamp()
+		msg.header.frame_id = "base_link"
+		msg.pose.position.x = float(x)
+		msg.pose.position.y = float(y)
+		msg.pose.position.z = float(z)
+		msg.pose.orientation.w = float(qw)
+		msg.pose.orientation.x = float(qx)
+		msg.pose.orientation.y = float(qy)
+		msg.pose.orientation.z = float(qz)
+		self._pub_pose_abs.publish(msg)
+
 	def publish_eef_position(self, x, y, z):
 		msg = PoseStamped()
 		msg.header.stamp = self._stamp()
@@ -70,6 +85,19 @@ class ROS2Transport(PoseTransport):
 		msg.pose.orientation.y = 0.0
 		msg.pose.orientation.z = 0.0
 		self._pub_position.publish(msg)
+
+	def publish_eef_position_absolute(self, x, y, z):
+		msg = PoseStamped()
+		msg.header.stamp = self._stamp()
+		msg.header.frame_id = "base_link"
+		msg.pose.position.x = float(x)
+		msg.pose.position.y = float(y)
+		msg.pose.position.z = float(z)
+		msg.pose.orientation.w = 1.0
+		msg.pose.orientation.x = 0.0
+		msg.pose.orientation.y = 0.0
+		msg.pose.orientation.z = 0.0
+		self._pub_position_abs.publish(msg)
 
 	def publish_eef_twist(self, vx, vy, vz, wx=0.0, wy=0.0, wz=0.0):
 		msg = TwistStamped()

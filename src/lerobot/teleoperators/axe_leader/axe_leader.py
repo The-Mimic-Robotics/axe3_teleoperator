@@ -363,7 +363,17 @@ class axeLeader(Teleoperator):
             hs.qy,
             hs.qz,
         )
+        self._transport.publish_eef_pose_absolute(
+            raw_xyz[0],
+            raw_xyz[1],
+            raw_xyz[2],
+            hs.qw,
+            hs.qx,
+            hs.qy,
+            hs.qz,
+        )
         self._transport.publish_eef_position(rel_xyz[0], rel_xyz[1], rel_xyz[2])
+        self._transport.publish_eef_position_absolute(raw_xyz[0], raw_xyz[1], raw_xyz[2])
         self._transport.publish_eef_twist(delta_xyz[0], delta_xyz[1], delta_xyz[2], 0.0, 0.0, 0.0)
         self._transport.publish_imu(
             hs.qw,
