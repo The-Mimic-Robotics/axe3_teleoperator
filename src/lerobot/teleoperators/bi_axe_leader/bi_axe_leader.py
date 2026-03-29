@@ -7,12 +7,13 @@ from ..teleoperator import Teleoperator
 from ..axe_leader.axe_leader import axeLeader
 from ..axe_leader.config_axe_leader import axeLeaderConfig
 from .config_bi_axe_leader import BiAxeLeaderConfig
+from .udp_transport import BiAxeUDPTransport
 
 logger = logging.getLogger(__name__)
 
 
 class BiAxeLeader(Teleoperator):
-    """Bimanual AXE leader teleoperator using two independent axeLeader instances."""
+    """Bimanual AXE leader using two axeLeader instances and one shared UDP target."""
 
     config_class = BiAxeLeaderConfig
     name = "bi_axe_leader"
@@ -21,21 +22,66 @@ class BiAxeLeader(Teleoperator):
         super().__init__(config)
         self.config = config
 
-        left_cfg_dict = {
-            **config.shared,
-            **config.left_arm,
-            "id": config.left_arm.get("id", f"{config.id}_left" if config.id else None),
-            "calibration_dir": config.calibration_dir,
-        }
-        right_cfg_dict = {
-            **config.shared,
-            **config.right_arm,
-            "id": config.right_arm.get("id", f"{config.id}_right" if config.id else None),
-            "calibration_dir": config.calibration_dir,
-        }
+        left_cfg = axeLeaderConfig(
+            id=f"{config.id}_left" if config.id else None,
+            calibration_dir=config.calibration_dir,
+            port=config.left_arm_port,
+            use_degrees=config.use_degrees,
+            arm=config.arm,
+            has_imu=config.has_imu,
+            handle_source=config.handle_source,
+            handle_device_name=config.left_handle_device_name,
+            imu_port=config.imu_port,
+            imu_ip=config.imu_ip,
+            transport="none",
+            udp_target_ip=config.udp_target_ip,
+            udp_target_port=config.udp_target_port,
+            udp_pose_only=config.udp_pose_only,
+            udp_print_packets=config.udp_print_packets,
+            require_arm_key=config.require_arm_key,
+            arm_key=config.arm_key,
+            arm_toggle_source=config.arm_toggle_source,
+            arm_toggle_cooldown_s=config.arm_toggle_cooldown_s,
+            position_deadband_m=config.position_deadband_m,
+            twist_deadband_m=config.twist_deadband_m,
+        )
+        right_cfg = axeLeaderConfig(
+            id=f"{config.id}_right" if config.id else None,
+            calibration_dir=config.calibration_dir,
+            port=config.right_arm_port,
+            use_degrees=config.use_degrees,
+            arm=config.arm,
+            has_imu=config.has_imu,
+            handle_source=config.handle_source,
+            handle_device_name=config.right_handle_device_name,
+            imu_port=config.imu_port,
+            imu_ip=config.imu_ip,
+            transport="none",
+            udp_target_ip=config.udp_target_ip,
+            udp_target_port=config.udp_target_port,
+            udp_pose_only=config.udp_pose_only,
+            udp_print_packets=config.udp_print_packets,
+            require_arm_key=config.require_arm_key,
+            arm_key=config.arm_key,
+            arm_toggle_source=config.arm_toggle_source,
+            arm_toggle_cooldown_s=config.arm_toggle_cooldown_s,
+            position_deadband_m=config.position_deadband_m,
+            twist_deadband_m=config.twist_deadband_m,
+        )
 
-        self.left_arm = axeLeader(axeLeaderConfig(**left_cfg_dict))
-        self.right_arm = axeLeader(axeLeaderConfig(**right_cfg_dict))
+        self.left_arm = axeLeader(left_cfg)
+        self.right_arm = axeLeader(right_cfg)
+
+        self._bi_udp = BiAxeUDPTransport(
+            ip=config.udp_target_ip,
+            port=config.udp_target_port,
+            pose_only=config.udp_pose_only,
+            print_packets=config.udp_print_packets,
+        )
+
+        # Route both single-arm publishers to one shared tagged UDP endpoint.
+        self.left_arm._transport = self._bi_udp.make_arm_transport("L")
+        self.right_arm._transport = self._bi_udp.make_arm_transport("R")
 
     @cached_property
     def action_features(self) -> dict[str, type]:
@@ -96,3 +142,4 @@ class BiAxeLeader(Teleoperator):
     def disconnect(self) -> None:
         self.left_arm.disconnect()
         self.right_arm.disconnect()
+        self._bi_udp.shutdown()
