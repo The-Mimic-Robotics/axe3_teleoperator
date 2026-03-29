@@ -14,6 +14,8 @@ class axe3LeaderConfig(TeleoperatorConfig):
     port: str
 
     use_degrees: bool = True
+    handle_source: str = "ble"
+    handle_device_name: str = "AXE3_left"
     imu_port: int = 5000
     imu_ip: str = "127.0.0.1"
 

@@ -4,10 +4,7 @@
 
 import logging
 import time
-import socket
-import struct
 import numpy as np
-import math
 
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.feetech import (
@@ -17,6 +14,7 @@ from lerobot.motors.feetech import (
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from ..teleoperator import Teleoperator
+from ..axe4_leader.handle_reader import HandleReader, LegacyIMUReader
 from .config_axe3_leader import axe3LeaderConfig
 
 logger = logging.getLogger(__name__)
@@ -47,14 +45,11 @@ class axe3Leader(Teleoperator):
             calibration=self.calibration,
         )
 
-        # 2. Setup UDP for IMU
-        # We bind to the IP/Port to listen for data from the C++ script
-        self.imu_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.imu_sock.bind((self.config.imu_ip, self.config.imu_port))
-        self.imu_sock.setblocking(False) # Non-blocking to avoid freezing the robot
-        
-        # Default IMU state (Identity Quaternion w=1, x=0, y=0, z=0)
-        self.latest_imu_data = [1.0, 0.0, 0.0, 0.0]
+        # 2. Setup Handle / IMU source
+        if config.handle_source == "ble":
+            self._handle = HandleReader(device_name=config.handle_device_name)
+        else:
+            self._handle = LegacyIMUReader(ip=config.imu_ip, port=config.imu_port)
 
     @property
     def action_features(self) -> dict[str, type]:
@@ -86,7 +81,11 @@ class axe3Leader(Teleoperator):
             self.calibrate()
 
         self.configure()
-        logger.info(f"{self} connected. Listening for IMU on {self.config.imu_ip}:{self.config.imu_port}")
+        self._handle.start()
+        if self.config.handle_source == "ble":
+            logger.info(f"{self} connected. BLE handle='{self.config.handle_device_name}'")
+        else:
+            logger.info(f"{self} connected. Listening for IMU on {self.config.imu_ip}:{self.config.imu_port}")
 
     @property
     def is_calibrated(self) -> bool:
@@ -150,19 +149,9 @@ class axe3Leader(Teleoperator):
         # action = {f"{motor}.pos": val for motor, val in action.items()}
 
         x, y, z = self.compute_forward_kinematics(raw_action)
-        
-        # 2. Read IMU (Drain the buffer to get the latest packet)
-        try:
-            while True:
-                # 4 floats = 16 bytes
-                data, _ = self.imu_sock.recvfrom(16)
-                # Unpack 4 floats (f f f f)
-                self.latest_imu_data = struct.unpack('4f', data)
-        except BlockingIOError:
-            # No more data in buffer, use the latest known value
-            pass
-        except Exception as e:
-            logger.warning(f"UDP Read Error: {e}")
+
+        # 2. Read IMU state from selected source (BLE or UDP)
+        handle_state = self._handle.state
 
         # 3. Merge Data
         # action["imu.qw"] = self.latest_imu_data[0]
@@ -174,10 +163,10 @@ class axe3Leader(Teleoperator):
             "x": x,
             "y": y,
             "z": z,
-            "imu.qw": self.latest_imu_data[0],
-            "imu.qx": self.latest_imu_data[1],
-            "imu.qy": self.latest_imu_data[2],
-            "imu.qz": self.latest_imu_data[3],
+            "imu.qw": handle_state.qw,
+            "imu.qx": handle_state.qx,
+            "imu.qy": handle_state.qy,
+            "imu.qz": handle_state.qz,
         }
 
 
@@ -195,8 +184,7 @@ class axe3Leader(Teleoperator):
             DeviceNotConnectedError(f"{self} is not connected.")
 
         self.bus.disconnect()
-        if hasattr(self, 'imu_sock'):
-            self.imu_sock.close()
+        self._handle.stop()
             
         logger.info(f"{self} disconnected.")
 

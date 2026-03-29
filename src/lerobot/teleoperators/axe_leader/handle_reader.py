@@ -1,13 +1,10 @@
 """
-BLE Handle Reader for the AXE4 teleoperator handle (ESP32 + JY901 IMU).
+BLE Handle Reader for AXE leader handle (ESP32 + IMU).
 
-Connects to the ESP32 via Bluetooth Low Energy and receives:
+Receives:
   - IMU angles  (roll, pitch, yaw)   3 floats  12 bytes
   - IMU quats   (w, x, y, z)         4 floats  16 bytes
   - Joystick    (x, y, z, sw, sw2)   3 floats + 2 uint8  14 bytes
-
-Replaces the old UDP-based IMU reader (imu_reader/).
-Source firmware: https://github.com/The-Mimic-Robotics/handle_v1
 """
 
 import asyncio
@@ -15,7 +12,7 @@ import logging
 import platform
 import struct
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +38,9 @@ class HandleState:
 
 
 class HandleReader:
-    """Thread-safe BLE reader for the ESP32 handle controller."""
+    """Thread-safe BLE reader for ESP32 handle controller."""
 
-    def __init__(self, device_name: str = "Handle ESP32"):
+    def __init__(self, device_name: str = "AXE3_left"):
         self.device_name = device_name
         self._state = HandleState()
         self._lock = threading.Lock()
@@ -97,6 +94,7 @@ class HandleReader:
                 logger.warning(f"BLE connection lost: {e}. Reconnecting in 2s...")
             if self._running:
                 import time
+
                 time.sleep(2.0)
 
     @staticmethod
@@ -143,19 +141,16 @@ class HandleReader:
         target_lower = target.lower()
         target_norm = self._normalize_name(target)
 
-        # 1) Exact case-insensitive
         for dev in devices:
             for cand in self._candidate_names(dev):
                 if cand.lower() == target_lower:
                     return dev
 
-        # 2) Exact normalized (handles spaces/_/- differences)
         for dev in devices:
             for cand in self._candidate_names(dev):
                 if self._normalize_name(cand) == target_norm:
                     return dev
 
-        # 3) Substring normalized
         for dev in devices:
             for cand in self._candidate_names(dev):
                 cand_norm = self._normalize_name(cand)
@@ -166,6 +161,11 @@ class HandleReader:
 
     async def _windows_preflight_pick(self, target: str):
         if platform.system() != "Windows":
+            return None
+
+        try:
+            from bleak import BleakScanner
+        except ImportError:
             return None
 
         devices = await BleakScanner.discover(timeout=4.0)
@@ -184,7 +184,7 @@ class HandleReader:
 
     async def _connect_and_listen(self) -> None:
         try:
-            from bleak import BleakScanner, BleakClient
+            from bleak import BleakClient, BleakScanner
         except ImportError:
             logger.error("bleak not installed. Run: pip install bleak")
             self._running = False
@@ -215,9 +215,7 @@ class HandleReader:
                     if n not in names:
                         names.append(n)
             if names:
-                logger.warning(
-                    f"Could not find '{self.device_name}'. Nearby BLE names: {', '.join(names[:10])}"
-                )
+                logger.warning(f"Could not find '{self.device_name}'. Nearby BLE names: {', '.join(names[:10])}")
             else:
                 logger.warning(f"Could not find '{self.device_name}'. Is it powered on and paired?")
             return
@@ -268,13 +266,11 @@ class HandleReader:
 
 
 class LegacyIMUReader:
-    """Fallback UDP-based IMU reader (old C++ imu_udp bridge).
-
-    Reads 4 floats (qw, qx, qy, qz) from a UDP socket.
-    """
+    """Fallback UDP-based IMU reader (old C++ imu_udp bridge)."""
 
     def __init__(self, ip: str = "127.0.0.1", port: int = 5000):
         import socket
+
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.bind((ip, port))
         self._sock.setblocking(False)

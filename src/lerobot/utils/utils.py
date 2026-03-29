@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +28,23 @@ from pathlib import Path
 from statistics import mean
 
 import numpy as np
-import torch
-from accelerate import Accelerator
+try:
+    import torch
+except Exception:  # noqa: BLE001 - torch is optional for non-training runtime paths
+    torch = None
+
+try:
+    from accelerate import Accelerator
+except Exception:  # noqa: BLE001 - accelerate is optional for non-training runtime paths
+    class Accelerator:  # type: ignore[no-redef]
+        is_main_process = True
+
+
+def _require_torch() -> None:
+    if torch is None:
+        raise ModuleNotFoundError(
+            "torch is required for this functionality. Install torch or avoid training/device helpers."
+        )
 
 # `datasets` (and thus `pyarrow`) is optional for many runtime paths (e.g. hardware control).
 # Import it lazily / defensively so environments without compatible OpenSSL / pyarrow can still run.
@@ -49,6 +66,7 @@ def inside_slurm():
 
 def auto_select_torch_device() -> torch.device:
     """Tries to select automatically a torch device."""
+    _require_torch()
     if torch.cuda.is_available():
         logging.info("Cuda backend detected, using cuda.")
         return torch.device("cuda")
@@ -66,6 +84,7 @@ def auto_select_torch_device() -> torch.device:
 # TODO(Steven): Remove log. log shouldn't be an argument, this should be handled by the logger level
 def get_safe_torch_device(try_device: str, log: bool = False) -> torch.device:
     """Given a string, return a torch.device with checks on whether the device is available."""
+    _require_torch()
     try_device = str(try_device)
     if try_device.startswith("cuda"):
         assert torch.cuda.is_available()
@@ -91,6 +110,7 @@ def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
     """
     mps is currently not compatible with float64
     """
+    _require_torch()
     if isinstance(device, torch.device):
         device = device.type
     if device == "mps" and dtype == torch.float64:
@@ -115,6 +135,7 @@ def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
 
 
 def is_torch_device_available(try_device: str) -> bool:
+    _require_torch()
     try_device = str(try_device)  # Ensure try_device is a string
     if try_device.startswith("cuda"):
         return torch.cuda.is_available()

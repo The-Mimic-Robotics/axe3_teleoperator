@@ -1,19 +1,12 @@
 #!/usr/bin/env python
-"""
-AXE4 leader teleoperator: 4× STS3215 arm + BLE handle (IMU + joystick).
-
-Pose from planar 3-link + pan FK (fk.py); orientation from handle quaternion.
-Publishes eef_pose, eef_position, eef_twist (deltas), imu, joy via ROS2 or UDP.
-"""
-
-# MISC Robotics - Achal Patel achalypatel3403@gmail.com
-# MISC Robotics - Mathias Desrochers eltopchi1@gmail.com
+"""AXE modular leader teleoperator (standalone implementation)."""
 
 import logging
 import os
 import select
 import sys
 import time
+
 import numpy as np
 
 try:
@@ -24,17 +17,14 @@ except Exception:
     tty = None
 
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
-from lerobot.motors.feetech import (
-    FeetechMotorsBus,
-    OperatingMode,
-)
+from lerobot.motors.feetech import FeetechMotorsBus, OperatingMode
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from ..teleoperator import Teleoperator
-from .config_axe4_leader import axe4LeaderConfig
-from .handle_reader import HandleReader, LegacyIMUReader
+from .config_axe_leader import axeLeaderConfig
+from .fk import forward_kinematics, load_motor_cfg, motor_deg_to_angles
+from .handle_reader import HandleReader, HandleState, LegacyIMUReader
 from .transport import create_transport
-from .fk import load_motor_cfg, motor_deg_to_angles, forward_kinematics
 
 logger = logging.getLogger(__name__)
 
@@ -85,47 +75,46 @@ class _ArmingKeyReader:
         self._old_term = None
 
 
-class axe4Leader(Teleoperator):
-    """
-    AXE4 leader: 4× STS3215 + BLE handle (IMU). Pose from planar FK + handle quaternion.
-    Publishes: eef_pose, eef_position, eef_twist (deltas), imu, joy.
+class axeLeader(Teleoperator):
+    """Configurable AXE leader teleoperator supporting 3 or 4 motor joints."""
 
-    On first get_action(), current EEF position is taken as home; subsequent
-    positions are reported relative to home (rel_xyz) and as deltas (delta_xyz).
-    """
+    config_class = axeLeaderConfig
+    name = "axe_leader"
 
-    config_class = axe4LeaderConfig
-    name = "axe4_leader"
-
-    def __init__(self, config: axe4LeaderConfig):
+    def __init__(self, config: axeLeaderConfig):
         super().__init__(config)
-        self.config = config
+        self.config: axeLeaderConfig = config
+
         norm_mode = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
 
+        motors = {
+            name: Motor(mid, model, norm_mode)
+            for name, mid, model in zip(config.joint_names, config.motor_ids, config.motor_models, strict=False)
+        }
+
+        filtered_calibration = {
+            name: calib for name, calib in self.calibration.items() if name in motors
+        }
+        self.calibration = filtered_calibration
         self.bus = FeetechMotorsBus(
             port=self.config.port,
-            motors={
-                "shoulder_pan": Motor(1, "sts3215", norm_mode),
-                "shoulder_lift": Motor(2, "sts3215", norm_mode),
-                "elbow_flex": Motor(3, "sts3215", norm_mode),
-                "elbow_super_flex": Motor(4, "sts3215", norm_mode),
-            },
+            motors=motors,
             calibration=self.calibration,
         )
 
-        if config.handle_source == "ble":
-            self._handle = HandleReader(device_name=config.handle_device_name)
+        self._transport_kind = config.transport
+        self._transport = self._create_transport_with_fallback(self._transport_kind)
+
+        if config.has_imu:
+            if config.handle_source == "ble":
+                self._handle = HandleReader(device_name=config.handle_device_name)
+            else:
+                self._handle = LegacyIMUReader(ip=config.imu_ip, port=config.imu_port)
         else:
-            self._handle = LegacyIMUReader(ip=config.imu_ip, port=config.imu_port)
+            self._handle: HandleReader | LegacyIMUReader | None = None
 
-        self._transport = create_transport(
-            config.transport,
-            udp_ip=config.udp_target_ip,
-            udp_port=config.udp_target_port,
-            udp_pose_only=getattr(config, "udp_pose_only", True),
-        )
+        self._motor_cfg = load_motor_cfg(self.config)
 
-        self._motor_cfg = load_motor_cfg()
         self._home_xyz = None
         self._prev_xyz = None
         self._cmd_xyz = None
@@ -133,13 +122,40 @@ class axe4Leader(Teleoperator):
         self._arm_reader = None
         if getattr(self.config, "require_arm_key", False):
             self._arm_reader = _ArmingKeyReader(getattr(self.config, "arm_key", "t"))
-            if not self._arm_reader.enabled:
+            if getattr(self.config, "arm_toggle_source", "keyboard") == "keyboard" and not self._arm_reader.enabled:
                 logger.warning("Arm-key gating requested but stdin is not interactive; teleop will start armed.")
                 self._armed = True
 
-    # ------------------------------------------------------------------
-    # Teleoperator interface
-    # ------------------------------------------------------------------
+        self._last_arm_toggle_t = 0.0
+        self._prev_arm_button_pressed = False
+
+    def _create_transport_with_fallback(self, kind: str):
+        try:
+            return create_transport(
+                kind,
+                udp_ip=self.config.udp_target_ip,
+                udp_port=self.config.udp_target_port,
+                udp_pose_only=getattr(self.config, "udp_pose_only", True),
+                udp_print_packets=getattr(self.config, "udp_print_packets", False),
+                ros2_node_name=self.config.ros2_node_name,
+                ros2_topic_prefix=self.config.ros2_topic_prefix,
+            )
+        except ImportError as e:
+            if kind != "ros2":
+                raise
+            logger.warning(
+                "ROS2 transport requested but ROS2 Python packages are unavailable; "
+                "falling back to UDP transport for this session."
+            )
+            self._transport_kind = "udp"
+            return create_transport(
+                "udp",
+                udp_ip=self.config.udp_target_ip,
+                udp_port=self.config.udp_target_port,
+                udp_pose_only=getattr(self.config, "udp_pose_only", True),
+                udp_print_packets=getattr(self.config, "udp_print_packets", False),
+            )
+
     @property
     def action_features(self) -> dict[str, type]:
         features = {f"{motor}.pos": float for motor in self.bus.motors}
@@ -170,15 +186,26 @@ class axe4Leader(Teleoperator):
             self.calibrate()
 
         self.configure()
-        self._handle.start()
-        if self._arm_reader and self._arm_reader.enabled:
+        # `lerobot-calibrate` calls connect(calibrate=False) before device.calibrate().
+        # In that flow, BLE/IMU is not needed and can add noisy reconnect logs.
+        if self._handle is not None and calibrate:
+            self._handle.start()
+
+        if self._arm_reader and self._arm_reader.enabled and self.config.arm_toggle_source == "keyboard":
             logger.info(
                 f"Teleop DISARMED. Press '{self.config.arm_key}' to arm and capture home; "
                 f"press again to disarm/pause."
             )
+        elif self.config.arm_toggle_source != "keyboard":
+            logger.info(
+                f"Teleop arm toggle source set to '{self.config.arm_toggle_source}'. "
+                "Press configured handle/xbox button to arm/disarm."
+            )
+
         logger.info(
-            f"{self} connected.  handle_source={self.config.handle_source}  "
-            f"transport={self.config.transport}"
+            f"{self} connected.  joints={self.config.num_joints}  "
+            f"handle_source={self.config.handle_source if self._handle is not None else 'none'}  "
+            f"transport={self._transport_kind}"
         )
 
     @property
@@ -202,7 +229,17 @@ class axe4Leader(Teleoperator):
             self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
 
         input(f"Move {self} to the middle of its range of motion and press ENTER....")
-        homing_offsets = self.bus.set_half_turn_homings()
+        try:
+            homing_offsets = self.bus.set_half_turn_homings()
+        except Exception as e:
+            expected = [(name, m.id) for name, m in self.bus.motors.items()]
+            raise ConnectionError(
+                "Motor communication failed while writing homing offsets. "
+                f"Expected motors (name,id): {expected}. "
+                "Check power, USB/TTL wiring, baud/port, and motor IDs. "
+                "If IDs are unknown/mismatched, run setup_motors() first. "
+                f"Original error: {e}"
+            ) from e
 
         print(
             "Move all joints sequentially through their entire ranges "
@@ -236,18 +273,45 @@ class axe4Leader(Teleoperator):
             self.bus.setup_motor(motor)
             print(f"'{motor}' motor id set to {self.bus.motors[motor].id}")
 
-    # ------------------------------------------------------------------
-    # Main action loop
-    # ------------------------------------------------------------------
+    def _toggle_button_pressed(self, hs: HandleState) -> bool:
+        source = getattr(self.config, "arm_toggle_source", "keyboard")
+        if source in {"handle_sw", "xbox_a"}:
+            return int(hs.sw) == 1
+        if source in {"handle_sw2", "xbox_b"}:
+            return int(hs.sw2) == 1
+        return False
+
+    def _poll_arm_toggle(self, hs: HandleState) -> bool:
+        now = time.perf_counter()
+        cooldown_s = float(getattr(self.config, "arm_toggle_cooldown_s", 0.3))
+        if now - self._last_arm_toggle_t < cooldown_s:
+            return False
+
+        source = getattr(self.config, "arm_toggle_source", "keyboard")
+        if source == "keyboard":
+            return bool(self._arm_reader and self._arm_reader.poll_toggle())
+
+        pressed = self._toggle_button_pressed(hs)
+        edge = pressed and not self._prev_arm_button_pressed
+        self._prev_arm_button_pressed = pressed
+        if edge:
+            self._last_arm_toggle_t = now
+        return edge
+
     def get_action(self) -> dict[str, float]:
-        """Read motor positions, run FK, set home on first call, publish pose/twist/imu/joy, return action dict."""
+        """Read motors, run dynamic FK, publish pose/twist/imu/joy, return action dict."""
         start = time.perf_counter()
         motor_degrees = self.bus.sync_read("Present_Position")
         q = motor_deg_to_angles(motor_degrees, self._motor_cfg)
-        raw_xyz, _ = forward_kinematics(*q)
+        raw_xyz, _ = forward_kinematics(
+            q,
+            link_lengths_m=self.config.link_lengths_m,
+        )
         raw_xyz = np.asarray(raw_xyz, dtype=np.float32)
 
-        if self._arm_reader and self._arm_reader.poll_toggle():
+        hs = self._handle.state if self._handle is not None else HandleState()
+
+        if self._poll_arm_toggle(hs):
             self._armed = not self._armed
             if self._armed:
                 self._home_xyz = raw_xyz.copy()
@@ -259,6 +323,8 @@ class axe4Leader(Teleoperator):
                 self._cmd_xyz = np.zeros(3, dtype=np.float32)
                 self._prev_xyz = self._cmd_xyz.copy()
                 logger.info("Teleop DISARMED. Publishing zero position/twist.")
+
+            self._last_arm_toggle_t = time.perf_counter()
 
         if not self._armed:
             rel_xyz = np.zeros(3, dtype=np.float32)
@@ -288,17 +354,25 @@ class axe4Leader(Teleoperator):
             delta_xyz[np.abs(delta_xyz) < tw_db] = 0.0
             self._prev_xyz = rel_xyz.copy()
 
-        hs = self._handle.state
-
         self._transport.publish_eef_pose(
-            rel_xyz[0], rel_xyz[1], rel_xyz[2],
-            hs.qw, hs.qx, hs.qy, hs.qz,
+            rel_xyz[0],
+            rel_xyz[1],
+            rel_xyz[2],
+            hs.qw,
+            hs.qx,
+            hs.qy,
+            hs.qz,
         )
         self._transport.publish_eef_position(rel_xyz[0], rel_xyz[1], rel_xyz[2])
         self._transport.publish_eef_twist(delta_xyz[0], delta_xyz[1], delta_xyz[2], 0.0, 0.0, 0.0)
         self._transport.publish_imu(
-            hs.qw, hs.qx, hs.qy, hs.qz,
-            hs.roll, hs.pitch, hs.yaw,
+            hs.qw,
+            hs.qx,
+            hs.qy,
+            hs.qz,
+            hs.roll,
+            hs.pitch,
+            hs.yaw,
         )
         self._transport.publish_buttons(hs.sw, hs.sw2, hs.joy_x, hs.joy_y, hs.joy_z)
 
@@ -326,14 +400,18 @@ class axe4Leader(Teleoperator):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         self.bus.disconnect()
-        self._handle.stop()
+        if self._handle is not None:
+            self._handle.stop()
         self._transport.shutdown()
         if self._arm_reader:
             self._arm_reader.close()
         logger.info(f"{self} disconnected.")
 
     def compute_forward_kinematics(self, joints_degrees: dict[str, float]) -> tuple[float, float, float]:
-        """Motor degrees -> (x, y, z) in m. Frame: X fwd, Y left, Z up. Uses planar FK + motor_cfg."""
+        """Motor degrees -> (x, y, z) in meters for active joints."""
         q = motor_deg_to_angles(joints_degrees, self._motor_cfg)
-        eef, _ = forward_kinematics(*q)
+        eef, _ = forward_kinematics(
+            q,
+            link_lengths_m=self.config.link_lengths_m,
+        )
         return float(eef[0]), float(eef[1]), float(eef[2])

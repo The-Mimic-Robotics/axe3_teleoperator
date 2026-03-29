@@ -26,38 +26,58 @@ lerobot-calibrate \
 """
 
 import logging
+from importlib import import_module
 from dataclasses import asdict, dataclass
 from pprint import pformat
 
 import draccus
 
-from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
-from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
-from lerobot.robots import (  # noqa: F401
-    Robot,
-    RobotConfig,
-    hope_jr,
-    koch_follower,
-    lekiwi,
-    make_robot_from_config,
-    omx_follower,
-    so100_follower,
-    so101_follower,
-    axe3_follower,
-)
-from lerobot.teleoperators import (  # noqa: F401
-    Teleoperator,
-    TeleoperatorConfig,
-    homunculus,
-    koch_leader,
-    make_teleoperator_from_config,
-    omx_leader,
-    so100_leader,
-    so101_leader,
-    axe3_leader,
-)
+try:
+    from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
+except Exception:
+    OpenCVCameraConfig = None  # type: ignore[assignment]
+
+try:
+    from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
+except Exception:
+    RealSenseCameraConfig = None  # type: ignore[assignment]
+
+from lerobot.robots import Robot, RobotConfig, make_robot_from_config
+from lerobot.teleoperators import Teleoperator, TeleoperatorConfig, make_teleoperator_from_config
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.utils import init_logging
+
+
+def _safe_import(module_name: str) -> None:
+    try:
+        import_module(module_name)
+    except Exception as e:
+        logging.debug(f"Skipping optional module '{module_name}': {e}")
+
+
+for _module in [
+    "lerobot.robots.earthrover_mini_plus",
+    "lerobot.robots.hope_jr",
+    "lerobot.robots.koch_follower",
+    "lerobot.robots.omx_follower",
+    "lerobot.robots.so100_follower",
+    "lerobot.robots.so101_follower",
+    "lerobot.robots.axe3_follower",
+    "lerobot.robots.axe4_follower",
+    "lerobot.teleoperators.axe3_leader",
+    "lerobot.teleoperators.axe4_leader",
+    "lerobot.teleoperators.axe_leader",
+    "lerobot.teleoperators.bi_axe_leader",
+    "lerobot.teleoperators.bi_so100_leader",
+    "lerobot.teleoperators.gamepad",
+    "lerobot.teleoperators.homunculus",
+    "lerobot.teleoperators.keyboard",
+    "lerobot.teleoperators.koch_leader",
+    "lerobot.teleoperators.omx_leader",
+    "lerobot.teleoperators.so100_leader",
+    "lerobot.teleoperators.so101_leader",
+]:
+    _safe_import(_module)
 
 
 @dataclass

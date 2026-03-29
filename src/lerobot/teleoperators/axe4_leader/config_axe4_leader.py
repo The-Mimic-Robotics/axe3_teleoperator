@@ -25,9 +25,10 @@ class axe4LeaderConfig(TeleoperatorConfig):
 
     # --- Handle / IMU source ---
     # "ble"  : BLE handle reader (default)
-    # "udp"  : legacy UDP IMU reader (C++ imu_udp bridge)
     handle_source: str = "ble"
-    handle_device_name: str = "Handle ESP32"
+    handle_device_name: str = "AXE3_left"
+
+    # "udp"  : legacy UDP IMU reader (C++ imu_udp bridge)
     imu_port: int = 5000
     imu_ip: str = "127.0.0.1"
 
@@ -38,8 +39,9 @@ class axe4LeaderConfig(TeleoperatorConfig):
     transport: str = "ros2"
     udp_target_ip: str = "127.0.0.1"
     udp_target_port: int = 5005
-    # When True (default), UDP sends only the 28-byte eef_pose packet. When False, sends all
-    # five packet types (28+12+24+28+14 bytes) which simple_udp_receiver treats as malformed.
+    # When True (default), UDP sends only the legacy 28-byte eef_pose packet (<7f>).
+    # When False, non-pose packets are sent with a 1-byte type tag to avoid collisions with
+    # receivers that parse raw 28-byte pose packets.
     udp_pose_only: bool = True
 
     # --- Teleop arming / filtering ---
