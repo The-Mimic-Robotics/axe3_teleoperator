@@ -4,16 +4,8 @@
     "shoulder_lift",
     "elbow_flex"
   ],
-  "signs": [
-    1,
-    1,
-    1
-  ],
-  "offsets": [
-    0,
-    -0.5714285714285713,
-    113.53846153846153
-  ],
+  "signs": [1, 1, -1],
+  "offsets": [-90, -140, -35],
   "ranges": {
     "shoulder_pan": {
       "min_delta": -81.3,
@@ -34,8 +26,8 @@
   "motor_cfg": [
     {
       "name": "shoulder_pan",
-      "sign": 1,
-      "offset": -90
+      "sign": -1,
+      "offset": -270
     },
     {
       "name": "shoulder_lift",
@@ -44,8 +36,8 @@
     },
     {
       "name": "elbow_flex",
-      "sign": -1,
-      "offset": -35
+      "sign": 1,
+      "offset": 215
     }
   ]
 }

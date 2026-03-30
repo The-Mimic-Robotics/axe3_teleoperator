@@ -94,6 +94,11 @@ class axeLeaderConfig(TeleoperatorConfig):
     position_deadband_m: float = 0.003
     twist_deadband_m: float = 0.001
 
+    # Right-hand arm in a mirrored pair: negate q2+q3 in FK (see fk.forward_kinematics).
+    planar_mirror_fk: bool = False
+    # Added to q3 after that negation (rad); default −π/2 on right arm in bi_axe_leader.
+    planar_mirror_elbow_offset_rad: float = 0.0
+
     @property
     def joint_defs(self) -> list[dict[str, object]]:
         joints = self.arm.get("joints", []) if isinstance(self.arm, dict) else []

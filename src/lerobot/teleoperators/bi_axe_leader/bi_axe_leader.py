@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import math
 from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
@@ -109,6 +110,8 @@ class BiAxeLeader(Teleoperator):
             arm_toggle_cooldown_s=config.arm_toggle_cooldown_s,
             position_deadband_m=config.position_deadband_m,
             twist_deadband_m=config.twist_deadband_m,
+            planar_mirror_fk=True,
+            planar_mirror_elbow_offset_rad=-math.pi / 2.0,
         )
 
         self.left_arm = axeLeader(left_cfg)

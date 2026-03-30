@@ -6,71 +6,11 @@ import json
 import time
 from pathlib import Path
 
+import math
+
 import numpy as np
 
-# Output semantic frame: X = forward, Y = left, Z = up.
-# Raw FK frame -> semantic frame via _FRAME_CORRECTION.
-_FRAME_CORRECTION = np.array(
-    [[0.0, 0.0, -1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-    dtype=np.float64,
-)
-
-
-def _rot_y(angle_rad: float) -> np.ndarray:
-    c, s = np.cos(angle_rad), np.sin(angle_rad)
-    return np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]], dtype=np.float64)
-
-
-def _rot_z(angle_rad: float) -> np.ndarray:
-    c, s = np.cos(angle_rad), np.sin(angle_rad)
-    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=np.float64)
-
-
-def forward_kinematics(q, link_lengths_m, negate_lift=False):
-    """Planar 3-link + pan FK.  Same convention as axe3_test/live_eef.py.
-
-    negate_lift=True  mirrors the shoulder-lift rotation to correct for
-    the right arm's calibration being the mirror of the left arm.
-    """
-    if q.size == 0:
-        zero = np.zeros(3, dtype=np.float64)
-        return zero, np.array([zero])
-
-    q1 = float(q[0]) if q.size >= 1 else 0.0
-    q2 = float(q[1]) if q.size >= 2 else 0.0
-    q3 = float(q[2]) if q.size >= 3 else 0.0
-
-    if negate_lift:
-        q2 = -q2
-
-    l1 = float(link_lengths_m[0]) if len(link_lengths_m) >= 1 else 0.0
-    l2 = float(link_lengths_m[1]) if len(link_lengths_m) >= 2 else 0.0
-    l3 = float(link_lengths_m[2]) if len(link_lengths_m) >= 3 else 0.0
-
-    v1 = np.array([l1, 0.0, 0.0], dtype=np.float64)
-    v2 = np.array([l2, 0.0, 0.0], dtype=np.float64)
-    v3 = np.array([l3, 0.0, 0.0], dtype=np.float64)
-
-    p0 = np.zeros(3, dtype=np.float64)
-    p1_local = v1
-    p2_local = p1_local + _rot_y(q2) @ v2
-    p3_local = p2_local + _rot_y(q2 + q3) @ v3
-
-    rz = _rot_z(q1)
-    p1 = rz @ p1_local
-    p2 = rz @ p2_local
-    p3 = rz @ p3_local
-
-    chain = np.vstack([p0, p1, p2, p3])
-    chain = (_FRAME_CORRECTION @ chain.T).T
-    return chain[-1], chain
-
-
-def motor_deg_to_angles(deg_dict, motor_cfg):
-    q = np.zeros(len(motor_cfg), dtype=np.float64)
-    for i, (name, sign, off) in enumerate(motor_cfg):
-        q[i] = np.radians(sign * deg_dict[name] + off)
-    return q
+from lerobot.teleoperators.axe_leader.fk import forward_kinematics, motor_deg_to_angles
 
 
 def load_motor_cfg_from_file(path):
@@ -83,9 +23,6 @@ def load_motor_cfg_from_file(path):
     if not motor_cfg:
         return None
     return [(m["name"], int(m["sign"]), float(m["offset"])) for m in motor_cfg]
-
-
-# ============ END INLINE FK ============
 
 
 def direction_label(x: float, y: float, z: float, threshold: float = 0.001) -> str:
@@ -185,7 +122,17 @@ def _draw_bimanual(ax, left_chain, left_eef, right_chain, right_eef, left_cmd, r
     plt.pause(0.03)
 
 
-def run_bimanual_live(left_bus, right_bus, left_motor_cfg, right_motor_cfg, link_lengths_m, arm_separation, viewer=True):
+def run_bimanual_live(
+    left_bus,
+    right_bus,
+    left_motor_cfg,
+    right_motor_cfg,
+    link_lengths_m,
+    arm_separation,
+    viewer=True,
+    *,
+    right_planar_elbow_offset_rad: float = -math.pi / 2.0,
+):
     print("\n" + "=" * 70)
     print("BIMANUAL LIVE EEF   Frame: X fwd | Y left | Z up")
     print(f"Arm separation: {arm_separation}m")
@@ -209,7 +156,12 @@ def run_bimanual_live(left_bus, right_bus, left_motor_cfg, right_motor_cfg, link
 
     right_home_deg = _read_pos(right_bus)
     right_home_q = motor_deg_to_angles(right_home_deg, right_motor_cfg)
-    right_home_eef, _ = forward_kinematics(right_home_q, link_lengths_m, negate_lift=True)
+    right_home_eef, _ = forward_kinematics(
+        right_home_q,
+        link_lengths_m,
+        planar_mirror=True,
+        planar_mirror_elbow_offset_rad=right_planar_elbow_offset_rad,
+    )
 
     ax = None
     if viewer:
@@ -236,7 +188,12 @@ def run_bimanual_live(left_bus, right_bus, left_motor_cfg, right_motor_cfg, link
             # Right arm
             right_deg = _read_pos(right_bus)
             right_q = motor_deg_to_angles(right_deg, right_motor_cfg)
-            right_eef, right_chain = forward_kinematics(right_q, link_lengths_m, negate_lift=True)
+            right_eef, right_chain = forward_kinematics(
+                right_q,
+                link_lengths_m,
+                planar_mirror=True,
+                planar_mirror_elbow_offset_rad=right_planar_elbow_offset_rad,
+            )
             right_cmd = right_eef - right_home_eef
 
             left_label = direction_label(left_cmd[0], left_cmd[1], left_cmd[2])
@@ -270,6 +227,17 @@ def main():
     ap.add_argument("--calib-dir", type=str, default="", help="Calibration directory")
     ap.add_argument("--links-m", type=float, nargs="+", default=[0.060, 0.210, 0.250])
     ap.add_argument("--arm-separation", type=float, default=0.5, help="Distance between arm bases (meters)")
+    ap.add_argument(
+        "--right-elbow-offset-deg",
+        type=float,
+        default=-90.0,
+        help="Extra elbow (q3) offset in FK for the right arm after planar mirror (default -90; try +90 if wrong)",
+    )
+    ap.add_argument(
+        "--debug-fk",
+        action="store_true",
+        help="After connect, print one FK diagnostic block (same as debug_fk_snapshot module).",
+    )
     ap.add_argument("--no-viewer", action="store_true")
     args = ap.parse_args()
 
@@ -318,8 +286,39 @@ def main():
     print(f"Connecting right arm on {args.right_port}...")
     right_bus = connect_arm(args.right_port, args.right_id, joint_names, motor_ids, calib_root)
 
+    if args.debug_fk:
+        from lerobot.teleoperators.bi_axe_leader.debug_fk_snapshot import run_fk_snapshot_print
+
+        def _snap_read(bus):
+            try:
+                return bus.sync_read("Present_Position")
+            except RuntimeError as e:
+                if "has no calibration registered" not in str(e):
+                    raise
+                return bus.sync_read("Present_Position", normalize=False)
+
+        run_fk_snapshot_print(
+            _snap_read(left_bus),
+            _snap_read(right_bus),
+            left_motor_cfg,
+            right_motor_cfg,
+            link_lengths_m,
+            right_elbow_off_rad=math.radians(args.right_elbow_offset_deg),
+            left_axis_path=left_axis_path,
+            right_axis_path=right_axis_path,
+        )
+
     try:
-        run_bimanual_live(left_bus, right_bus, left_motor_cfg, right_motor_cfg, link_lengths_m, args.arm_separation, viewer=not args.no_viewer)
+        run_bimanual_live(
+            left_bus,
+            right_bus,
+            left_motor_cfg,
+            right_motor_cfg,
+            link_lengths_m,
+            args.arm_separation,
+            viewer=not args.no_viewer,
+            right_planar_elbow_offset_rad=math.radians(args.right_elbow_offset_deg),
+        )
     finally:
         left_bus.disconnect()
         right_bus.disconnect()

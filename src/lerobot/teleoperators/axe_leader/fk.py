@@ -144,6 +144,9 @@ def _rot_z(angle_rad: float) -> np.ndarray:
 def forward_kinematics(
     q: np.ndarray,
     link_lengths_m: list[float] | tuple[float, ...],
+    *,
+    planar_mirror: bool = False,
+    planar_mirror_elbow_offset_rad: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Planar 3-link + pan FK for AXE3 leader arm.
 
@@ -155,6 +158,15 @@ def forward_kinematics(
     All link vectors start along +X in the raw frame.  The
     _FRAME_CORRECTION matrix then maps to the semantic output frame
     (X=fwd, Y=left, Z=up) that the visualiser and teleop use.
+
+    ``planar_mirror=True`` (right-hand leader in a bimanual pair): negate
+    both q2 and q3 before FK so the forearm uses ``-(q2+q3)``.  Negating
+    only q2 (old ``negate_lift``) left q2+q3 inconsistent and skewed the
+    elbow→EEF segment; axis JSON alone cannot fix that without this.
+
+    ``planar_mirror_elbow_offset_rad`` is added to q3 after that negation
+    (typically ``−π/2`` for this hardware) when the physical right elbow
+    zero is rotated vs the left-arm FK model so the forearm aligns in the plot.
 
     Link convention:
       link_lengths_m[0]  base-to-shoulder
@@ -174,6 +186,10 @@ def forward_kinematics(
     q1 = float(q[0]) if q.size >= 1 else 0.0
     q2 = float(q[1]) if q.size >= 2 else 0.0
     q3 = float(q[2]) if q.size >= 3 else 0.0
+
+    if planar_mirror:
+        q2 = -q2
+        q3 = -q3 + float(planar_mirror_elbow_offset_rad)
 
     l1 = float(link_lengths_m[0]) if len(link_lengths_m) >= 1 else 0.0
     l2 = float(link_lengths_m[1]) if len(link_lengths_m) >= 2 else 0.0

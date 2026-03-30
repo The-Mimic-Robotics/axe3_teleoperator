@@ -311,6 +311,8 @@ class axeLeader(Teleoperator):
         raw_xyz, _ = forward_kinematics(
             q,
             link_lengths_m=self.config.link_lengths_m,
+            planar_mirror=self.config.planar_mirror_fk,
+            planar_mirror_elbow_offset_rad=self.config.planar_mirror_elbow_offset_rad,
         )
         raw_xyz = np.asarray(raw_xyz, dtype=np.float32)
 
@@ -428,5 +430,7 @@ class axeLeader(Teleoperator):
         eef, _ = forward_kinematics(
             q,
             link_lengths_m=self.config.link_lengths_m,
+            planar_mirror=self.config.planar_mirror_fk,
+            planar_mirror_elbow_offset_rad=self.config.planar_mirror_elbow_offset_rad,
         )
         return float(eef[0]), float(eef[1]), float(eef[2])
