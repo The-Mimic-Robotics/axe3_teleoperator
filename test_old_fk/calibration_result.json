@@ -1,0 +1,58 @@
+﻿{
+  "signs": [
+    1,
+    -1,
+    1,
+    1
+  ],
+  "offsets": [
+    -78.54945054945054,
+    78.83516483516483,
+    66.0,
+    66.3516483516483
+  ],
+  "ranges": {
+    "shoulder_pan": {
+      "min_delta": -243.2,
+      "max_delta": -114.4,
+      "range": 128.8
+    },
+    "shoulder_lift": {
+      "min_delta": -90.9,
+      "max_delta": 89.2,
+      "range": 180.1
+    },
+    "elbow_flex": {
+      "min_delta": 86.5,
+      "max_delta": 321.2,
+      "range": 234.7
+    },
+    "elbow_super_flex": {
+      "min_delta": -38.2,
+      "max_delta": 88.6,
+      "range": 126.8
+    }
+  },
+  "motor_cfg": [
+    {
+      "name": "shoulder_pan",
+      "sign": 1,
+      "offset": -78.5
+    },
+    {
+      "name": "shoulder_lift",
+      "sign": -1,
+      "offset": 78.8
+    },
+    {
+      "name": "elbow_flex",
+      "sign": 1,
+      "offset": 66.0
+    },
+    {
+      "name": "elbow_super_flex",
+      "sign": 1,
+      "offset": 66.4
+    }
+  ]
+}

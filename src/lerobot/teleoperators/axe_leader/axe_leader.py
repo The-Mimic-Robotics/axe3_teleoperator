@@ -107,7 +107,12 @@ class axeLeader(Teleoperator):
 
         if config.has_imu:
             if config.handle_source == "ble":
-                self._handle = HandleReader(device_name=config.handle_device_name)
+                    self._handle = HandleReader(
+                        device_name=config.handle_device_name,
+                        char_uuid_angle=config.resolved_handle_ble_uuids["angle"],
+                        char_uuid_quat=config.resolved_handle_ble_uuids["quat"],
+                        char_uuid_joy=config.resolved_handle_ble_uuids["joy"],
+                    )
             else:
                 self._handle = LegacyIMUReader(ip=config.imu_ip, port=config.imu_port)
         else:

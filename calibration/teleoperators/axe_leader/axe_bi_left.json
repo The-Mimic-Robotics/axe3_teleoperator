@@ -1,0 +1,23 @@
+{
+    "shoulder_pan": {
+        "id": 1,
+        "drive_mode": 0,
+        "homing_offset": -887,
+        "range_min": 1061,
+        "range_max": 3358
+    },
+    "shoulder_lift": {
+        "id": 2,
+        "drive_mode": 0,
+        "homing_offset": -1148,
+        "range_min": 893,
+        "range_max": 3006
+    },
+    "elbow_flex": {
+        "id": 3,
+        "drive_mode": 0,
+        "homing_offset": -809,
+        "range_min": 1299,
+        "range_max": 2834
+    }
+}

@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 import logging
+from copy import deepcopy
 from functools import cached_property
+from pathlib import Path
 
 from ..teleoperator import Teleoperator
 from ..axe_leader.axe_leader import axeLeader
@@ -22,15 +24,54 @@ class BiAxeLeader(Teleoperator):
         super().__init__(config)
         self.config = config
 
+        left_id = f"{config.id}_left" if config.id else "axe_left"
+        right_id = f"{config.id}_right" if config.id else "axe_right"
+
+        left_arm_cfg = deepcopy(config.arm)
+        right_arm_cfg = deepcopy(config.arm)
+
+        # Resolve axis calibration paths - use explicit paths or auto-discover from calibration_dir
+        left_axis_path = config.left_axis_calibration_path
+        right_axis_path = config.right_axis_calibration_path
+
+        if not left_axis_path and config.calibration_dir:
+            candidates = [
+                Path(config.calibration_dir) / "axis_left.json",
+                Path(config.calibration_dir) / f"{left_id}.json",
+                Path(config.calibration_dir) / "calibration_result.json",
+            ]
+            for p in candidates:
+                if p.exists():
+                    left_axis_path = str(p)
+                    logger.info(f"Auto-resolved left axis calibration: {left_axis_path}")
+                    break
+
+        if not right_axis_path and config.calibration_dir:
+            candidates = [
+                Path(config.calibration_dir) / "axis_right.json",
+                Path(config.calibration_dir) / f"{right_id}.json",
+            ]
+            for p in candidates:
+                if p.exists():
+                    right_axis_path = str(p)
+                    logger.info(f"Auto-resolved right axis calibration: {right_axis_path}")
+                    break
+
+        if left_axis_path:
+            left_arm_cfg["axis_calibration_path"] = left_axis_path
+        if right_axis_path:
+            right_arm_cfg["axis_calibration_path"] = right_axis_path
+
         left_cfg = axeLeaderConfig(
-            id=f"{config.id}_left" if config.id else None,
+            id=left_id,
             calibration_dir=config.calibration_dir,
             port=config.left_arm_port,
             use_degrees=config.use_degrees,
-            arm=config.arm,
+            arm=left_arm_cfg,
             has_imu=config.has_imu,
             handle_source=config.handle_source,
             handle_device_name=config.left_handle_device_name,
+            handle_ble_uuids=config.left_handle_ble_uuids,
             imu_port=config.imu_port,
             imu_ip=config.imu_ip,
             transport="none",
@@ -46,14 +87,15 @@ class BiAxeLeader(Teleoperator):
             twist_deadband_m=config.twist_deadband_m,
         )
         right_cfg = axeLeaderConfig(
-            id=f"{config.id}_right" if config.id else None,
+            id=right_id,
             calibration_dir=config.calibration_dir,
             port=config.right_arm_port,
             use_degrees=config.use_degrees,
-            arm=config.arm,
+            arm=right_arm_cfg,
             has_imu=config.has_imu,
             handle_source=config.handle_source,
             handle_device_name=config.right_handle_device_name,
+            handle_ble_uuids=config.right_handle_ble_uuids,
             imu_port=config.imu_port,
             imu_ip=config.imu_ip,
             transport="none",

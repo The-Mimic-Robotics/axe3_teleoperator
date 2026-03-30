@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ..config import TeleoperatorConfig
 
@@ -13,8 +14,10 @@ class BiAxeLeaderConfig(TeleoperatorConfig):
     right_arm_port: str = "/dev/ttyACM1"
 
     # BLE handles auto-default to left/right names; override only if needed.
-    left_handle_device_name: str = "AXE3_left"
-    right_handle_device_name: str = "AXE3_right"
+    left_handle_device_name: str = "AXE4_left"
+    right_handle_device_name: str = "AXE4_right"
+    left_handle_ble_uuids: dict[str, str] = field(default_factory=dict)
+    right_handle_ble_uuids: dict[str, str] = field(default_factory=dict)
 
     # Shared AXE leader behavior
     use_degrees: bool = True
@@ -28,6 +31,8 @@ class BiAxeLeaderConfig(TeleoperatorConfig):
             ],
         }
     )
+    left_axis_calibration_path: str = ""
+    right_axis_calibration_path: str = ""
     has_imu: bool = True
     handle_source: str = "ble"
     imu_port: int = 5000
@@ -53,3 +58,17 @@ class BiAxeLeaderConfig(TeleoperatorConfig):
             raise ValueError("left_arm_port is required")
         if not self.right_arm_port:
             raise ValueError("right_arm_port is required")
+
+        if self.calibration_dir is None:
+            repo_root = Path(__file__).resolve().parents[4]
+            self.calibration_dir = repo_root / "calibration" / "teleoperators" / "bi_axe_leader"
+
+        required = {"angle", "quat", "joy"}
+        for side, uuids in (
+            ("left", self.left_handle_ble_uuids),
+            ("right", self.right_handle_ble_uuids),
+        ):
+            if uuids and not required.issubset(set(uuids.keys())):
+                raise ValueError(
+                    f"{side}_handle_ble_uuids must include keys: {sorted(required)}"
+                )

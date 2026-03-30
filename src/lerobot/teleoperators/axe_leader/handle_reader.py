@@ -16,10 +16,6 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-CHAR_UUID_ANGLE = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-CHAR_UUID_QUAT = "828917c1-ea55-4d4a-a66e-fd202cea0645"
-CHAR_UUID_JOY = "9c661337-b499-497d-aa5b-0105316e6e22"
-
 
 @dataclass
 class HandleState:
@@ -40,8 +36,17 @@ class HandleState:
 class HandleReader:
     """Thread-safe BLE reader for ESP32 handle controller."""
 
-    def __init__(self, device_name: str = "AXE3_left"):
+    def __init__(
+        self,
+        device_name: str = "AXE4_left",
+        char_uuid_angle: str = "beb5483e-36e1-4688-b7f5-ea07361b26a8",
+        char_uuid_quat: str = "828917c1-ea55-4d4a-a66e-fd202cea0645",
+        char_uuid_joy: str = "9c661337-b499-497d-aa5b-0105316e6e22",
+    ):
         self.device_name = device_name
+        self.char_uuid_angle = char_uuid_angle
+        self.char_uuid_quat = char_uuid_quat
+        self.char_uuid_joy = char_uuid_joy
         self._state = HandleState()
         self._lock = threading.Lock()
         self._connected = False
@@ -225,16 +230,16 @@ class HandleReader:
             self._connected = True
             logger.info("BLE connected. Subscribing to characteristics...")
 
-            await client.start_notify(CHAR_UUID_ANGLE, self._on_angle)
-            await client.start_notify(CHAR_UUID_QUAT, self._on_quat)
-            await client.start_notify(CHAR_UUID_JOY, self._on_joy)
+            await client.start_notify(self.char_uuid_angle, self._on_angle)
+            await client.start_notify(self.char_uuid_quat, self._on_quat)
+            await client.start_notify(self.char_uuid_joy, self._on_joy)
 
             while self._running and client.is_connected:
                 await asyncio.sleep(0.05)
 
-            await client.stop_notify(CHAR_UUID_ANGLE)
-            await client.stop_notify(CHAR_UUID_QUAT)
-            await client.stop_notify(CHAR_UUID_JOY)
+            await client.stop_notify(self.char_uuid_angle)
+            await client.stop_notify(self.char_uuid_quat)
+            await client.stop_notify(self.char_uuid_joy)
             self._connected = False
 
     def _on_angle(self, _sender, data: bytearray) -> None:

@@ -26,7 +26,7 @@ class axe4LeaderConfig(TeleoperatorConfig):
     # --- Handle / IMU source ---
     # "ble"  : BLE handle reader (default)
     handle_source: str = "ble"
-    handle_device_name: str = "AXE3_left"
+    handle_device_name: str = "AXE4_left"
 
     # "udp"  : legacy UDP IMU reader (C++ imu_udp bridge)
     imu_port: int = 5000

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 AXE4 FK Calibration Wizard.
 
@@ -22,35 +22,24 @@ import json
 import numpy as np
 from pathlib import Path
 
-# ── Motor bus setup (same as live_eef.py) ────────────────────────────
+# ΓöÇΓöÇ Motor bus setup (same as live_eef.py) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-# Default calibration root - can be overridden via --calib-root
-_DEFAULT_CALIB_ROOT = Path(__file__).resolve().parents[4] / "calibration" / "teleoperators" / "bi_axe_leader"
-CALIB_ROOT = _DEFAULT_CALIB_ROOT
-
-_FULL_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "elbow_super_flex"]
-_FULL_SHORT = ["pan", "lift", "elbow", "super"]
-_FULL_DESIRED_HOME = [0.0, 90.0, -90.0, -90.0]
-
-NAMES = _FULL_NAMES[:3]
-SHORT = _FULL_SHORT[:3]
-DESIRED_HOME = _FULL_DESIRED_HOME[:3]
+CALIB_ROOT = (
+    Path.home()
+    / ".cache/huggingface/lerobot/calibration/teleoperators/axe4_leader"
+)
 
 
-def _configure_joint_layout(num_joints: int) -> None:
-    global NAMES, SHORT, DESIRED_HOME
-    if num_joints not in (3, 4):
-        raise ValueError(f"num_joints must be 3 or 4, got {num_joints}")
-    NAMES = _FULL_NAMES[:num_joints]
-    SHORT = _FULL_SHORT[:num_joints]
-    DESIRED_HOME = _FULL_DESIRED_HOME[:num_joints]
-
-
-def connect(port, arm_id, num_joints):
+def connect(port, arm_id):
     from lerobot.motors import Motor, MotorCalibration, MotorNormMode
     from lerobot.motors.feetech import FeetechMotorsBus, OperatingMode
 
-    motors = {name: Motor(i + 1, "sts3215", MotorNormMode.DEGREES) for i, name in enumerate(_FULL_NAMES[:num_joints])}
+    motors = {
+        "shoulder_pan":      Motor(1, "sts3215", MotorNormMode.DEGREES),
+        "shoulder_lift":     Motor(2, "sts3215", MotorNormMode.DEGREES),
+        "elbow_flex":        Motor(3, "sts3215", MotorNormMode.DEGREES),
+        "elbow_super_flex":  Motor(4, "sts3215", MotorNormMode.DEGREES),
+    }
 
     calib = None
     path = CALIB_ROOT / f"{arm_id}.json"
@@ -59,8 +48,6 @@ def connect(port, arm_id, num_joints):
             raw = json.load(f)
         calib = {}
         for name, info in raw.items():
-            if name not in motors:
-                continue
             calib[name] = MotorCalibration(
                 id=info["id"],
                 drive_mode=info["drive_mode"],
@@ -83,7 +70,10 @@ def connect(port, arm_id, num_joints):
     return bus
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
+# ΓöÇΓöÇ Helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "elbow_super_flex"]
+SHORT = ["pan", "lift", "elbow", "super"]
 
 SAMPLE_N = 15
 SAMPLE_HZ = 30
@@ -93,7 +83,7 @@ def sample(bus):
     """Average a burst of readings to reduce noise."""
     readings = []
     for _ in range(SAMPLE_N):
-        readings.append(bus.sync_read("Present_Position", normalize=False))
+        readings.append(bus.sync_read("Present_Position"))
         time.sleep(1.0 / SAMPLE_HZ)
     out = {}
     for k in readings[0]:
@@ -106,7 +96,7 @@ def delta(a, b):
 
 
 def fmt(d):
-    return "  ".join(f"{SHORT[i]}={d[NAMES[i]]:+7.1f}" for i in range(len(NAMES)))
+    return "  ".join(f"{SHORT[i]}={d[NAMES[i]]:+7.1f}" for i in range(4))
 
 
 def banner(text):
@@ -127,15 +117,15 @@ def prompt_and_sample(bus, msg):
 
 def live_monitor(bus, ref, duration=999):
     """Show live motor deltas until user presses ENTER (via KeyboardInterrupt hack)."""
-    print("    (move now — live feedback below, press Ctrl+C when in position)\n")
+    print("    (move now ΓÇö live feedback below, press Ctrl+C when in position)\n")
     try:
         while True:
-            deg = bus.sync_read("Present_Position", normalize=False)
+            deg = bus.sync_read("Present_Position")
             dd = delta(deg, ref)
             top = max(dd, key=lambda k: abs(dd[k]))
             top_i = NAMES.index(top)
             tag = f"  <- {SHORT[top_i]} {dd[top]:+.1f}" if abs(dd[top]) > 2 else ""
-            cols = "  ".join(f"{SHORT[i]}={dd[NAMES[i]]:+6.1f}" for i in range(len(NAMES)))
+            cols = "  ".join(f"{SHORT[i]}={dd[NAMES[i]]:+6.1f}" for i in range(4))
             print(f"    {cols}{tag}              ", end="\r")
             time.sleep(0.04)
     except KeyboardInterrupt:
@@ -145,12 +135,12 @@ def live_monitor(bus, ref, duration=999):
     return d
 
 
-# ── Main calibration session ─────────────────────────────────────────
+# ΓöÇΓöÇ Main calibration session ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-def run(bus, output_path: str | None = None):
+def run(bus):
     data = {}
 
-    banner("AXE FK CALIBRATION WIZARD")
+    banner("AXE4 FK CALIBRATION WIZARD")
     print("""
 This will guide you through a series of arm poses.
 For each step:
@@ -161,7 +151,7 @@ For each step:
 The result: correct motor signs, offsets, and joint limits.
 """)
 
-    # ── PHASE 1: HOME ────────────────────────────────────────────────
+    # ΓöÇΓöÇ PHASE 1: HOME ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     banner("PHASE 1: HOME POSITION")
     print("Put the arm in its natural REST pose (arch/portal shape).")
     print("Links should be roughly 90 deg from each other:")
@@ -169,7 +159,7 @@ The result: correct motor signs, offsets, and joint limits.
     data["HOME"] = prompt_and_sample(bus, "Hold the arm in HOME position.")
     home = data["HOME"]
 
-    # ── PHASE 2: INDIVIDUAL JOINT RANGES ─────────────────────────────
+    # ΓöÇΓöÇ PHASE 2: INDIVIDUAL JOINT RANGES ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     banner("PHASE 2: INDIVIDUAL JOINT LIMITS")
     print("For each joint, move it to both extremes.")
     print("Move ONLY the specified joint, keep others still.")
@@ -182,19 +172,16 @@ The result: correct motor signs, offsets, and joint limits.
         ("LIFT_MIN",     "Return to HOME. Push SHOULDER to the OTHER extreme."),
         ("ELBOW_MAX",    "Return to HOME. Push ELBOW (joint 3) to one extreme."),
         ("ELBOW_MIN",    "Return to HOME. Push ELBOW to the OTHER extreme."),
+        ("SUPER_MAX",    "Return to HOME. Push WRIST/SUPER (joint 4) to one extreme."),
+        ("SUPER_MIN",    "Return to HOME. Push WRIST/SUPER to the OTHER extreme."),
     ]
-    if len(NAMES) == 4:
-        joint_steps += [
-            ("SUPER_MAX", "Return to HOME. Push WRIST/SUPER (joint 4) to one extreme."),
-            ("SUPER_MIN", "Return to HOME. Push WRIST/SUPER to the OTHER extreme."),
-        ]
 
     for name, msg in joint_steps:
         print(f"\n--- {name} ---")
         print(f">>> {msg}")
         data[name] = live_monitor(bus, home)
 
-    # ── PHASE 3: EEF DIRECTIONS ──────────────────────────────────────
+    # ΓöÇΓöÇ PHASE 3: EEF DIRECTIONS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     banner("PHASE 3: EEF DIRECTIONS")
     print("From HOME, move the GRIP/HANDLE in each direction.")
     print("Use whatever combination of joints feels natural.")
@@ -217,33 +204,32 @@ The result: correct motor signs, offsets, and joint limits.
         print(f">>> {msg}")
         data[name] = live_monitor(bus, eef_home)
 
-    # ── SAVE RAW DATA ────────────────────────────────────────────────
+    # ΓöÇΓöÇ SAVE RAW DATA ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     out_path = Path("axe4_FK/calibration_data.json")
     with open(out_path, "w") as f:
         json.dump(data, f, indent=2)
-    print(f"\nRaw data saved → {out_path}")
+    print(f"\nRaw data saved ΓåÆ {out_path}")
 
-    # ── ANALYZE ──────────────────────────────────────────────────────
-    analyze(data, output_path=output_path)
+    # ΓöÇΓöÇ ANALYZE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    analyze(data)
 
 
-# ── Analysis ─────────────────────────────────────────────────────────
+# ΓöÇΓöÇ Analysis ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-def analyze(data, output_path: str | None = None):
+def analyze(data):
     banner("ANALYSIS")
 
     home = data["HOME"]
     eef_home = data.get("EEF_HOME", home)
 
-    # ── Joint ranges ─────────────────────────────────────────────────
+    # ΓöÇΓöÇ Joint ranges ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     print("\n--- Joint ranges (motor degrees from HOME) ---")
     pairs = [
         ("shoulder_pan",      "PAN_LEFT",    "PAN_RIGHT"),
         ("shoulder_lift",     "LIFT_MAX",    "LIFT_MIN"),
         ("elbow_flex",        "ELBOW_MAX",   "ELBOW_MIN"),
+        ("elbow_super_flex",  "SUPER_MAX",   "SUPER_MIN"),
     ]
-    if len(NAMES) == 4:
-        pairs.append(("elbow_super_flex", "SUPER_MAX", "SUPER_MIN"))
 
     ranges = {}
     for motor, key_a, key_b in pairs:
@@ -255,10 +241,9 @@ def analyze(data, output_path: str | None = None):
                          "range": round(hi - lo, 1)}
         print(f"  {motor:20s}  [{lo:+7.1f} .. {hi:+7.1f}]  range={hi-lo:.1f} deg")
 
-    # ── EEF direction analysis ───────────────────────────────────────
+    # ΓöÇΓöÇ EEF direction analysis ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     print("\n--- EEF direction motor deltas from HOME ---")
-    header_cols = "  ".join(f"{s:>7s}" for s in SHORT)
-    print(f"  {'Direction':12s}  {header_cols}  biggest_motor")
+    print(f"  {'Direction':12s}  {'pan':>7s}  {'lift':>7s}  {'elbow':>7s}  {'super':>7s}  biggest_motor")
 
     eef_deltas = {}
     for direction in ["FORWARD", "BACKWARD", "LEFT", "RIGHT", "UP", "DOWN"]:
@@ -269,14 +254,14 @@ def analyze(data, output_path: str | None = None):
         eef_deltas[direction] = dd
 
         top = max(dd, key=lambda k: abs(dd[k]))
-        vals = "  ".join(f"{dd[NAMES[i]]:+7.1f}" for i in range(len(NAMES)))
+        vals = "  ".join(f"{dd[NAMES[i]]:+7.1f}" for i in range(4))
         print(f"  {direction:12s}  {vals}  {top}")
 
-    # ── Sign determination ───────────────────────────────────────────
+    # ΓöÇΓöÇ Sign determination ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     print("\n--- Sign determination ---")
-    print("Convention: +q1=LEFT, +q2=more-upward, +q3=open-elbow" + (", +q4=open-wrist" if len(NAMES) == 4 else ""))
+    print("Convention: +q1=LEFT, +q2=more-upward, +q3=open-elbow, +q4=open-wrist")
 
-    signs = [None for _ in NAMES]
+    signs = [None, None, None, None]
 
     # Pan sign: LEFT should give +q1
     if "LEFT" in eef_deltas and "RIGHT" in eef_deltas:
@@ -287,7 +272,7 @@ def analyze(data, output_path: str | None = None):
         else:
             signs[0] = +1 if d_right < 0 else -1
         print(f"  Pan:   LEFT gave pan delta {d_left:+.1f}, "
-              f"RIGHT gave {d_right:+.1f}  →  sign = {signs[0]:+d}")
+              f"RIGHT gave {d_right:+.1f}  ΓåÆ  sign = {signs[0]:+d}")
 
     # Lift sign: UP should increase q2 (more upward)
     if "UP" in eef_deltas and "DOWN" in eef_deltas:
@@ -297,7 +282,7 @@ def analyze(data, output_path: str | None = None):
             # UP means more vertical = larger q2, so +q2 when moving up
             signs[1] = +1 if d_up > 0 else -1
             print(f"  Lift:  UP gave lift delta {d_up:+.1f}, "
-                  f"DOWN gave {d_down:+.1f}  →  sign = {signs[1]:+d}")
+                  f"DOWN gave {d_down:+.1f}  ΓåÆ  sign = {signs[1]:+d}")
         else:
             print(f"  Lift:  UP/DOWN deltas too small ({d_up:+.1f}/{d_down:+.1f}), "
                   "using FORWARD/BACKWARD")
@@ -305,7 +290,7 @@ def analyze(data, output_path: str | None = None):
             d_bwd = eef_deltas.get("BACKWARD", {}).get("shoulder_lift", 0)
             # FORWARD = lean forward = decrease q2
             signs[1] = -1 if d_fwd > 0 else +1
-            print(f"         FWD gave lift delta {d_fwd:+.1f}  →  sign = {signs[1]:+d}")
+            print(f"         FWD gave lift delta {d_fwd:+.1f}  ΓåÆ  sign = {signs[1]:+d}")
 
     # Elbow sign: FORWARD should open elbow (increase a3 toward horizontal)
     # At home a3=0 (horizontal), going forward means a3 stays ~0 but arm reaches out
@@ -315,16 +300,16 @@ def analyze(data, output_path: str | None = None):
         d_down = eef_deltas["DOWN"]["elbow_flex"]
         d_fwd = eef_deltas.get("FORWARD", {}).get("elbow_flex", 0)
         biggest = max([d_up, d_down, d_fwd], key=abs)
-        # UP typically means elbow opens (forearm goes more upward) → Δq3 > 0
+        # UP typically means elbow opens (forearm goes more upward) ΓåÆ ╬öq3 > 0
         if abs(d_up) > abs(d_down):
             signs[2] = +1 if d_up > 0 else -1
         else:
             signs[2] = +1 if d_down < 0 else -1
         print(f"  Elbow: UP gave elbow delta {d_up:+.1f}, "
-              f"DOWN gave {d_down:+.1f}  →  sign = {signs[2]:+d}")
+              f"DOWN gave {d_down:+.1f}  ΓåÆ  sign = {signs[2]:+d}")
 
     # Super sign: similar logic
-    if len(NAMES) == 4 and "DOWN" in eef_deltas and "FORWARD" in eef_deltas:
+    if "DOWN" in eef_deltas and "FORWARD" in eef_deltas:
         d_fwd = eef_deltas["FORWARD"]["elbow_super_flex"]
         d_down = eef_deltas["DOWN"]["elbow_super_flex"]
         d_up = eef_deltas.get("UP", {}).get("elbow_super_flex", 0)
@@ -333,33 +318,35 @@ def analyze(data, output_path: str | None = None):
         else:
             signs[3] = -1 if d_fwd > 0 else +1
         print(f"  Super: FWD gave super delta {d_fwd:+.1f}, "
-              f"DOWN gave {d_down:+.1f}  →  sign = {signs[3]:+d}")
+              f"DOWN gave {d_down:+.1f}  ΓåÆ  sign = {signs[3]:+d}")
 
     # Fill in any None signs with best guess
-    defaults = [+1, -1, -1, -1][: len(NAMES)]
-    for i in range(len(NAMES)):
+    defaults = [+1, -1, -1, -1]
+    for i in range(4):
         if signs[i] is None:
             signs[i] = defaults[i]
             print(f"  {SHORT[i]:6s}: could not determine, using default {signs[i]:+d}")
 
-    # ── Offset determination ─────────────────────────────────────────
+    # ΓöÇΓöÇ Offset determination ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     print("\n--- Offset determination ---")
-    print("At HOME, the FK angles should be: q1=0, q2=+90, q3=-90" + (", q4=-90" if len(NAMES) == 4 else ""))
-    desired_home = DESIRED_HOME
-    offsets = [0.0 for _ in NAMES]
+    print("At HOME, the FK angles should be: q1=0, q2=+90, q3=-90, q4=-90")
+    desired_home = [0.0, 90.0, -90.0, -90.0]
+    offsets = [0.0, 0.0, 0.0, 0.0]
 
-    for i in range(len(NAMES)):
+    for i in range(4):
         m_home = home[NAMES[i]]
         offsets[i] = desired_home[i] - signs[i] * m_home
         print(f"  {SHORT[i]:6s}: motor_home={m_home:+7.1f}  sign={signs[i]:+d}  "
-              f"→ offset = {desired_home[i]} - ({signs[i]:+d})*({m_home:.1f}) = {offsets[i]:+.1f}")
+              f"ΓåÆ offset = {desired_home[i]} - ({signs[i]:+d})*({m_home:.1f}) = {offsets[i]:+.1f}")
 
-    # ── Output ───────────────────────────────────────────────────────
-    banner("RESULT — paste this into axe4_FK/live_eef.py")
+    # ΓöÇΓöÇ Output ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    banner("RESULT ΓÇö paste this into axe4_FK/live_eef.py")
     print()
     print("MOTOR_CFG = [")
-    for i, name in enumerate(NAMES):
-        print(f'    ("{name}", {signs[i]:+d}, {offsets[i]:+7.1f}),')
+    print(f'    ("shoulder_pan",       {signs[0]:+d},  {offsets[0]:+7.1f}),')
+    print(f'    ("shoulder_lift",      {signs[1]:+d},  {offsets[1]:+7.1f}),')
+    print(f'    ("elbow_flex",         {signs[2]:+d},  {offsets[2]:+7.1f}),')
+    print(f'    ("elbow_super_flex",   {signs[3]:+d},  {offsets[3]:+7.1f}),')
     print("]")
 
     print("\n--- Joint limits (degrees from HOME) ---")
@@ -372,49 +359,38 @@ def analyze(data, output_path: str | None = None):
     result = {
         "signs": signs,
         "offsets": offsets,
-        "ranges": {NAMES[i]: ranges[NAMES[i]] for i in range(len(NAMES))},
+        "ranges": {NAMES[i]: ranges[NAMES[i]] for i in range(4)},
         "motor_cfg": [
             {"name": NAMES[i], "sign": signs[i], "offset": round(offsets[i], 1)}
-            for i in range(len(NAMES))
+            for i in range(4)
         ],
     }
-    out_path = Path(output_path) if output_path else Path("axe4_FK/calibration_result.json")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path = Path("axe4_FK/calibration_result.json")
     with open(out_path, "w") as f:
         json.dump(result, f, indent=2)
-    print(f"\nResult saved → {out_path}")
+    print(f"\nResult saved ΓåÆ {out_path}")
     print("\nNow update MOTOR_CFG in axe4_FK/live_eef.py and re-run live mode.")
 
 
-# ── Entry point ──────────────────────────────────────────────────────
+# ΓöÇΓöÇ Entry point ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 def main():
-    global CALIB_ROOT
-    ap = argparse.ArgumentParser(description="AXE FK calibration wizard")
+    ap = argparse.ArgumentParser(description="AXE4 FK calibration wizard")
     ap.add_argument("--port", default="/dev/ttyACM0")
     ap.add_argument("--id", default="axe", help="calibration file ID")
-    ap.add_argument("--num-joints", type=int, default=3, choices=[3, 4])
-    ap.add_argument("--output", type=str, default=None, help="output path for calibration_result JSON")
-    ap.add_argument("--calib-root", type=str, default=None,
-                    help="calibration root directory (default: calibration/teleoperators/bi_axe_leader)")
     ap.add_argument("--analyze-only", type=str, default=None,
                     help="skip collection, analyze existing JSON file")
     args = ap.parse_args()
 
-    if args.calib_root:
-        CALIB_ROOT = Path(args.calib_root)
-
-    _configure_joint_layout(args.num_joints)
-
     if args.analyze_only:
         with open(args.analyze_only) as f:
             data = json.load(f)
-        analyze(data, output_path=args.output)
+        analyze(data)
         return
 
-    bus = connect(args.port, args.id, args.num_joints)
+    bus = connect(args.port, args.id)
     try:
-        run(bus, output_path=args.output)
+        run(bus)
     finally:
         bus.disconnect()
 
